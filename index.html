@@ -30,6 +30,7 @@
     --wine:#c0395a;
     --wine2:#8e2142;
     --danger:#ff5a50;
+    --ok:#3ddc84;
     --safe-top:env(safe-area-inset-top, 0px);
     --safe-bottom:env(safe-area-inset-bottom, 0px);
   }
@@ -60,7 +61,8 @@
 
   .tools{position:sticky;top:var(--safe-top);z-index:5;padding:8px 0 10px;
     background:linear-gradient(var(--bg) 85%,transparent)}
-  .search{position:relative}
+  .searchrow{display:flex;gap:10px}
+  .search{position:relative;flex:1;min-width:0}
   .search input{width:100%;height:54px;border-radius:16px;border:1px solid var(--line);
     background:var(--surface);color:var(--text);font-size:17px;padding:0 16px 0 46px;outline:none;
     -webkit-appearance:none;appearance:none}
@@ -68,6 +70,10 @@
   .search input::-webkit-search-cancel-button{-webkit-appearance:none}
   .search svg{position:absolute;left:16px;top:50%;transform:translateY(-50%);
     width:20px;height:20px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round}
+  .scanbtn{flex:0 0 58px;width:58px;height:54px;border-radius:16px;border:none;cursor:pointer;
+    background:linear-gradient(135deg,var(--wine),var(--wine2));display:grid;place-items:center;touch-action:manipulation}
+  .scanbtn:active{transform:scale(.93)}
+  .scanbtn svg,.scan-mini svg{width:26px;height:26px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
   .sort{display:flex;gap:8px;margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;
     scrollbar-width:none;padding-bottom:2px}
@@ -91,6 +97,7 @@
   .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
   .name{font-size:18px;font-weight:700;line-height:1.25;word-break:break-word}
   .meta{color:var(--muted);font-size:14px;margin-top:3px}
+  .code{color:var(--muted);font-size:12px;margin-top:3px;letter-spacing:.4px;font-variant-numeric:tabular-nums;word-break:break-all}
   .floor{display:inline-block;margin-top:7px;padding:4px 11px;border-radius:999px;
     background:var(--surface2);border:1px solid var(--line);font-size:12px;font-weight:700;color:var(--text)}
   .floor i{font-style:normal;color:var(--wine)}
@@ -141,6 +148,11 @@
     background-repeat:no-repeat;padding-right:40px}
   .sheet input:focus,.sheet select:focus{border-color:var(--wine)}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .coderow{display:flex;gap:10px}
+  .coderow input{flex:1;min-width:0}
+  .scan-mini{flex:0 0 58px;width:58px;height:56px;border-radius:14px;border:none;cursor:pointer;
+    background:linear-gradient(135deg,var(--wine),var(--wine2));display:grid;place-items:center;touch-action:manipulation}
+  .scan-mini:active{transform:scale(.93)}
 
   .photo-edit{display:flex;gap:14px;align-items:center;margin-top:8px}
   .photo-edit .photo{flex:0 0 96px;width:96px;height:128px}
@@ -157,8 +169,28 @@
   .btn:active{transform:scale(.96)}
   .btn.cancel{background:var(--surface2);color:var(--text)}
   .btn.save{background:linear-gradient(135deg,var(--wine),var(--wine2));color:#fff}
-  .btn:disabled{opacity:.5}
   .err{color:var(--danger);font-size:14px;margin-top:10px;min-height:18px}
+  .info{color:var(--ok);font-size:14px;margin-top:10px;line-height:1.4}
+  .info:empty{display:none}
+
+  /* Scanner */
+  .scanner{position:fixed;inset:0;z-index:70;background:#000;display:none;flex-direction:column;
+    padding:calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom))}
+  .scanner.open{display:flex}
+  .scanner h2{margin:6px 0 4px;font-size:22px;text-align:center}
+  .scanner .hint{color:var(--muted);text-align:center;font-size:14px;margin-bottom:14px}
+  .reader-box{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+  #reader{width:100%;max-width:520px;border-radius:22px;overflow:hidden;background:#0a0a0a}
+  #reader video{width:100%!important;display:block;border-radius:22px}
+  .scan-status{color:var(--text);text-align:center;font-size:15px;line-height:1.45;padding:14px 8px;min-height:60px}
+  .scan-status.bad{color:var(--danger)}
+  .scanner .btn{width:100%;max-width:520px;margin:0 auto}
+
+  .toast{position:fixed;left:50%;bottom:calc(96px + var(--safe-bottom));transform:translate(-50%,20px);
+    max-width:calc(100% - 32px);background:var(--surface2);border:1px solid var(--line);color:var(--text);
+    padding:14px 20px;border-radius:16px;font-size:15px;font-weight:600;z-index:90;opacity:0;pointer-events:none;
+    transition:opacity .2s,transform .2s;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
 </style>
 </head>
 <body>
@@ -175,9 +207,14 @@
   </section>
 
   <div class="tools">
-    <div class="search">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Rechercher un vin…" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search">
+    <div class="searchrow">
+      <div class="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Rechercher un vin…" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search">
+      </div>
+      <button class="scanbtn" id="scanBtn" type="button" aria-label="Scanner un code-barres">
+        <svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2"/><path d="M8 8v8M12 8v8M16 8v8"/></svg>
+      </button>
     </div>
     <div class="sort" id="sort">
       <button type="button" class="chip" data-sort="floor">Étage <span class="arr"></span></button>
@@ -195,6 +232,7 @@
   <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Ajouter
 </button>
 
+<!-- Formulaire ajout / édition -->
 <div class="overlay" id="overlay">
   <form class="sheet" id="form" autocomplete="off">
     <h2 id="sheetTitle">Nouvelle bouteille</h2>
@@ -211,6 +249,14 @@
     <input class="hidden-input" id="camInput" type="file" accept="image/*" capture="environment">
     <input class="hidden-input" id="galInput" type="file" accept="image/*">
 
+    <label for="fCode">Code-barres</label>
+    <div class="coderow">
+      <input id="fCode" type="text" inputmode="numeric" placeholder="Scanner ou saisir le code" autocomplete="off">
+      <button type="button" class="scan-mini" id="scanFieldBtn" aria-label="Scanner le code-barres">
+        <svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2"/><path d="M8 8v8M12 8v8M16 8v8"/></svg>
+      </button>
+    </div>
+
     <label for="fName">Nom du vin</label>
     <input id="fName" type="text" placeholder="Ex. Château Margaux" autocapitalize="words" enterkeyhint="next">
     <div class="row">
@@ -225,6 +271,7 @@
       <div><label for="fFloor">Étage (1 à 10)</label>
         <select id="fFloor"></select></div>
     </div>
+    <div class="info" id="info"></div>
     <div class="err" id="err"></div>
     <div class="actions">
       <button type="button" class="btn cancel" id="cancelBtn">Annuler</button>
@@ -233,6 +280,17 @@
   </form>
 </div>
 
+<!-- Scanner de code-barres -->
+<div class="scanner" id="scanner">
+  <h2>Scanner un code-barres</h2>
+  <div class="hint" id="scanHint">Centrez le code-barres de la bouteille dans le cadre</div>
+  <div class="reader-box"><div id="reader"></div></div>
+  <div class="scan-status" id="scanStatus"></div>
+  <button type="button" class="btn cancel" id="scanClose">Fermer</button>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
 <script>
 (function(){
   'use strict';
@@ -240,16 +298,14 @@
   var SORT_KEY = 'maCaveAVin.sort';
   var items = [];
   var editingId = null;
-  var currentPhoto = '';   /* image compressée (data URL JPEG) du formulaire en cours */
+  var currentPhoto = '';
   var sortState = {key:'name', dir:'asc'};
-  /* Sens par défaut au premier appui sur chaque critère */
   var DEFAULT_DIR = {floor:'asc', name:'asc', price:'asc', year:'asc', qty:'desc'};
 
   var $ = function(id){ return document.getElementById(id); };
-  var listEl=$('list'), qEl=$('q'), overlay=$('overlay'), form=$('form'), errEl=$('err');
-  var fName=$('fName'), fYear=$('fYear'), fPrice=$('fPrice'), fQty=$('fQty'), fFloor=$('fFloor');
+  var listEl=$('list'), qEl=$('q'), overlay=$('overlay'), form=$('form'), errEl=$('err'), infoEl=$('info');
+  var fName=$('fName'), fYear=$('fYear'), fPrice=$('fPrice'), fQty=$('fQty'), fFloor=$('fFloor'), fCode=$('fCode');
 
-  /* Sélecteur d'étage : 1 à 10 */
   for(var i=1;i<=10;i++){
     var o = document.createElement('option'); o.value = i; o.textContent = 'Étage ' + i;
     fFloor.appendChild(o);
@@ -262,12 +318,21 @@
       var raw = localStorage.getItem(KEY);
       items = raw ? JSON.parse(raw) : [];
       if(!Array.isArray(items)) items = [];
-      items.forEach(function(b){ b.floor = clampFloor(b.floor); b.photo = b.photo || ''; });
+      items = items.filter(function(b){ return b && typeof b === 'object' && b.name; });
+      items.forEach(function(b){
+        b.id = b.id || uid();
+        b.floor = clampFloor(b.floor);
+        b.photo = b.photo || '';
+        b.barcode = b.barcode ? String(b.barcode) : '';
+        b.price = Number(b.price) || 0;
+        b.qty = Math.max(0, parseInt(b.qty,10) || 0);
+      });
     }catch(e){ items = []; }
     try{
       var s = JSON.parse(localStorage.getItem(SORT_KEY) || 'null');
       if(s && DEFAULT_DIR[s.key] && (s.dir==='asc'||s.dir==='desc')) sortState = s;
     }catch(e){}
+    /* Demande au navigateur de ne pas effacer les données automatiquement */
     try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   }
   function save(){
@@ -288,6 +353,15 @@
   function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
   function haptic(){ try{ if(navigator.vibrate) navigator.vibrate(10); }catch(e){} }
   function byName(a,b){ return a.name.localeCompare(b.name,'fr'); }
+  function findByCode(code, exceptId){
+    if(!code) return null;
+    return items.find(function(b){ return b.barcode === code && b.id !== exceptId; }) || null;
+  }
+  var toastTimer = null;
+  function toast(msg){
+    var t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.classList.remove('show'); },2600);
+  }
 
   /* ---------- Tri ---------- */
   function sorter(){
@@ -298,7 +372,6 @@
       else if(k === 'price') r = (a.price - b.price);
       else if(k === 'qty') r = (a.qty - b.qty);
       else if(k === 'year'){
-        /* les bouteilles sans millésime passent toujours en dernier */
         if(!a.year && !b.year) return byName(a,b);
         if(!a.year) return 1;
         if(!b.year) return -1;
@@ -327,7 +400,9 @@
   /* ---------- Rendu ---------- */
   function render(){
     var term = qEl.value.trim().toLowerCase();
-    var shown = items.filter(function(b){ return b.name.toLowerCase().indexOf(term) !== -1; }).sort(sorter());
+    var shown = items.filter(function(b){
+      return !term || b.name.toLowerCase().indexOf(term) !== -1;
+    }).sort(sorter());
 
     var totalB = 0, totalV = 0;
     items.forEach(function(b){ totalB += b.qty; totalV += b.qty * b.price; });
@@ -338,7 +413,7 @@
     if(!shown.length){
       listEl.innerHTML = '<div class="empty"><div class="big">🍾</div>' +
         (items.length ? 'Aucune bouteille ne correspond à votre recherche.'
-                      : 'Votre cave est vide.<br>Touchez « Ajouter » pour commencer.') + '</div>';
+                      : 'Votre cave est vide.<br>Touchez « Ajouter » ou scannez un code-barres.') + '</div>';
       return;
     }
 
@@ -351,6 +426,7 @@
           '<div class="top"><div style="min-width:0">' +
             '<div class="name">'+esc(b.name)+'</div>' +
             '<div class="meta">'+esc(year)+' · '+eur.format(b.price)+'</div>' +
+            (b.barcode ? '<div class="code">▮▯▮ '+esc(b.barcode)+'</div>' : '') +
             '<span class="floor">Étage <i>'+b.floor+'</i></span>' +
           '</div><div class="menu">' +
             '<button class="icon-btn" data-act="edit" aria-label="Modifier"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>' +
@@ -367,12 +443,10 @@
     }).join('');
   }
 
-  /* ---------- Actions sur la liste ---------- */
   listEl.addEventListener('click',function(e){
     var btn = e.target.closest('button[data-act]');
     if(!btn) return;
-    var card = btn.closest('.card');
-    var id = card.getAttribute('data-id');
+    var id = btn.closest('.card').getAttribute('data-id');
     var b = items.find(function(x){ return x.id === id; });
     if(!b) return;
     var act = btn.getAttribute('data-act');
@@ -388,8 +462,27 @@
     }
   });
 
+  /* ---------- Pile d'écrans + bouton retour Android ---------- */
+  var layers = [], ignorePop = 0;
+  function pushLayer(name){
+    layers.push(name);
+    try{ history.pushState({layer:name},''); }catch(e){}
+  }
+  function popLayer(name, noBack){
+    var i = layers.lastIndexOf(name);
+    if(i === -1) return;
+    layers.splice(i,1);
+    if(!noBack){ ignorePop++; try{ history.back(); }catch(e){ ignorePop--; } }
+  }
+  window.addEventListener('popstate',function(){
+    if(ignorePop > 0){ ignorePop--; return; }
+    var top = layers.pop();
+    if(top === 'scan') hideScanner();
+    else if(top === 'sheet') hideSheet();
+  });
+
   /* ---------- Photo : import + compression ---------- */
-  var MAX_SIDE = 360, QUALITY = 0.6;   /* ≈ 15–30 Ko par photo */
+  var MAX_SIDE = 360, QUALITY = 0.6;
 
   function compressImage(file){
     return new Promise(function(resolve,reject){
@@ -433,7 +526,7 @@
   $('rmBtn').addEventListener('click',function(){ currentPhoto = ''; showPhotoPreview(); });
 
   /* ---------- Feuille d'ajout / édition ---------- */
-  function openSheet(b){
+  function openSheet(b, prefillCode){
     editingId = b ? b.id : null;
     $('sheetTitle').textContent = b ? 'Modifier la bouteille' : 'Nouvelle bouteille';
     fName.value  = b ? b.name : '';
@@ -441,25 +534,23 @@
     fPrice.value = b ? b.price : '';
     fQty.value   = b ? b.qty : '1';
     fFloor.value = b ? b.floor : '1';
+    fCode.value  = b ? (b.barcode || '') : (prefillCode || '');
     currentPhoto = b ? (b.photo || '') : '';
     showPhotoPreview();
     errEl.textContent = '';
+    infoEl.textContent = (!b && prefillCode) ? 'Nouveau code-barres détecté : complétez la fiche de cette bouteille.' : '';
     overlay.classList.add('open');
+    pushLayer('sheet');
   }
-  function closeSheet(){
+  function hideSheet(){
     overlay.classList.remove('open');
     if(document.activeElement) document.activeElement.blur();
   }
+  function closeSheet(){ hideSheet(); popLayer('sheet'); }
 
   $('addBtn').addEventListener('click',function(){ openSheet(null); });
   $('cancelBtn').addEventListener('click',closeSheet);
   overlay.addEventListener('click',function(e){ if(e.target === overlay) closeSheet(); });
-
-  /* Bouton retour Android : ferme la feuille au lieu de quitter l'app */
-  window.addEventListener('popstate',function(){ if(overlay.classList.contains('open')) overlay.classList.remove('open'); });
-  new MutationObserver(function(){
-    if(overlay.classList.contains('open')){ try{ history.pushState({sheet:1},''); }catch(e){} }
-  }).observe(overlay,{attributes:true,attributeFilter:['class']});
 
   form.addEventListener('submit',function(e){
     e.preventDefault();
@@ -468,19 +559,22 @@
     var price = fPrice.value.trim() === '' ? 0 : parseFloat(String(fPrice.value).replace(',','.'));
     var qty = fQty.value.trim() === '' ? 0 : parseInt(fQty.value,10);
     var floor = parseInt(fFloor.value,10);
+    var code = fCode.value.replace(/\s+/g,'');
 
     if(!name){ errEl.textContent = 'Le nom du vin est obligatoire.'; return; }
     if(isNaN(price) || price < 0){ errEl.textContent = 'Prix invalide.'; return; }
     if(isNaN(qty) || qty < 0){ errEl.textContent = 'Quantité invalide.'; return; }
     if(year !== null && (isNaN(year) || year < 1800 || year > 2100)){ errEl.textContent = 'Millésime invalide.'; return; }
     if(isNaN(floor) || floor < 1 || floor > 10){ errEl.textContent = 'L’étage doit être compris entre 1 et 10.'; return; }
+    var dup = findByCode(code, editingId);
+    if(dup){ errEl.textContent = 'Ce code-barres est déjà associé à « '+dup.name+' ».'; return; }
 
     var snapshot = JSON.stringify(items);
     if(editingId){
       var b = items.find(function(x){ return x.id === editingId; });
-      if(b){ b.name=name; b.year=year; b.price=price; b.qty=qty; b.floor=floor; b.photo=currentPhoto; }
+      if(b){ b.name=name; b.year=year; b.price=price; b.qty=qty; b.floor=floor; b.photo=currentPhoto; b.barcode=code; }
     }else{
-      items.push({id:uid(), name:name, year:year, price:price, qty:qty, floor:floor, photo:currentPhoto});
+      items.push({id:uid(), name:name, year:year, price:price, qty:qty, floor:floor, photo:currentPhoto, barcode:code});
     }
     if(!save()){
       items = JSON.parse(snapshot);
@@ -492,6 +586,124 @@
 
   qEl.addEventListener('input',render);
   qEl.addEventListener('keydown',function(e){ if(e.key==='Enter'){ qEl.blur(); } });
+
+  /* ---------- Scanner de code-barres (html5-qrcode, chargé à la demande) ---------- */
+  var LIB_URLS = [
+    'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+    'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
+  ];
+  var libPromise = null, scanner = null, scanOpen = false, scanMode = 'stock', scanHandled = false, scanToken = 0;
+  var scannerEl = $('scanner'), statusEl = $('scanStatus');
+
+  function loadLib(){
+    if(window.Html5Qrcode) return Promise.resolve();
+    if(libPromise) return libPromise;
+    libPromise = new Promise(function(resolve,reject){
+      (function next(i){
+        if(i >= LIB_URLS.length){ libPromise = null; return reject(new Error('lib')); }
+        var s = document.createElement('script');
+        s.src = LIB_URLS[i];
+        s.onload = function(){ if(window.Html5Qrcode) resolve(); else { s.remove(); next(i+1); } };
+        s.onerror = function(){ s.remove(); next(i+1); };
+        document.head.appendChild(s);
+      })(0);
+    });
+    return libPromise;
+  }
+  function setStatus(msg, bad){
+    statusEl.textContent = msg; statusEl.classList.toggle('bad', !!bad);
+  }
+  function stopScanner(){
+    var s = scanner; scanner = null;
+    if(!s) return Promise.resolve();
+    var p;
+    try{ p = s.stop(); }catch(e){ p = Promise.resolve(); }
+    return Promise.resolve(p).catch(function(){}).then(function(){ try{ s.clear(); }catch(e){} });
+  }
+  function hideScanner(){
+    scanOpen = false; scanToken++;
+    scannerEl.classList.remove('open');
+    stopScanner();
+  }
+  function closeScanner(noBack){ hideScanner(); popLayer('scan', noBack); }
+
+  function openScanner(mode){
+    scanMode = mode; scanHandled = false;
+    var token = ++scanToken;
+    $('scanHint').textContent = mode === 'field'
+      ? 'Scannez le code-barres à associer à cette bouteille'
+      : 'Scannez une bouteille : le stock s’incrémente, ou une nouvelle fiche s’ouvre';
+    setStatus('Ouverture de la caméra…');
+    scannerEl.classList.add('open'); scanOpen = true;
+    pushLayer('scan');
+
+    if(!window.isSecureContext){
+      setStatus('La caméra nécessite une page en HTTPS (ou localhost). Vous pouvez saisir le code à la main dans la fiche.', true);
+      return;
+    }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      setStatus('Caméra non disponible sur ce navigateur.', true);
+      return;
+    }
+    loadLib().then(function(){
+      if(!scanOpen || token !== scanToken) return;
+      var F = window.Html5QrcodeSupportedFormats;
+      scanner = new window.Html5Qrcode('reader',{
+        verbose:false,
+        formatsToSupport:[F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.QR_CODE, F.DATA_MATRIX],
+        experimentalFeatures:{useBarCodeDetectorIfSupported:true}
+      });
+      var cfg = {
+        fps:10,
+        qrbox:function(w,h){ return {width:Math.floor(w*0.86), height:Math.floor(Math.min(w*0.5,h*0.9))}; }
+      };
+      return scanner.start({facingMode:'environment'}, cfg, onDecode, function(){})
+        .then(function(){
+          if(!scanOpen || token !== scanToken){ stopScanner(); return; }
+          setStatus('Placez le code-barres dans le cadre, bien éclairé et net.');
+        });
+    }).catch(function(err){
+      scanner = null;
+      var m = String(err && (err.message || err.name || err));
+      if(m === 'lib') setStatus('Impossible de charger la bibliothèque de scan. Vérifiez votre connexion Internet, puis réessayez.', true);
+      else if(/denied|NotAllowed|Permission/i.test(m)) setStatus('Accès à la caméra refusé. Autorisez la caméra dans les réglages du navigateur ou de l’application.', true);
+      else if(/NotFound|no camera|Requested device/i.test(m)) setStatus('Aucune caméra détectée.', true);
+      else setStatus('Caméra indisponible : ' + m, true);
+    });
+  }
+
+  function onDecode(text){
+    if(scanHandled || !scanOpen) return;
+    scanHandled = true;
+    haptic();
+    var code = String(text||'').replace(/\s+/g,'');
+    var mode = scanMode;
+    closeScanner(true);   /* pas de history.back() ici : une feuille peut s'ouvrir juste après */
+    handleCode(code, mode);
+  }
+
+  function handleCode(code, mode){
+    if(!code) return;
+    if(mode === 'field'){
+      fCode.value = code;
+      var dup = findByCode(code, editingId);
+      if(dup){ infoEl.textContent = ''; errEl.textContent = 'Ce code-barres est déjà associé à « '+dup.name+' ».'; }
+      else { errEl.textContent = ''; infoEl.textContent = 'Code-barres enregistré dans la fiche : ' + code; }
+      return;
+    }
+    var found = findByCode(code, null);
+    if(found){
+      found.qty++;
+      if(save()){ render(); toast('+1 · ' + found.name + ' (stock : ' + found.qty + ')'); }
+      else { found.qty--; toast('Espace de stockage plein, impossible d’enregistrer.'); }
+    }else{
+      openSheet(null, code);
+    }
+  }
+
+  $('scanBtn').addEventListener('click',function(){ openScanner('stock'); });
+  $('scanFieldBtn').addEventListener('click',function(){ openScanner('field'); });
+  $('scanClose').addEventListener('click',function(){ closeScanner(false); });
 
   /* ---------- Icônes + manifeste complété à l'exécution ---------- */
   function drawIcon(size){
