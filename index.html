@@ -162,12 +162,6 @@
         <button type="button" class="chip" data-sort="vintage">Millésime <span class="arr"></span></button>
         <button type="button" class="chip" data-sort="qty">Quantité <span class="arr"></span></button>
       </div>
-      <div class="scroll-x flex gap-2 mt-2" id="smart">
-        <button type="button" class="chip" data-smart="all">Tous <span class="cnt opacity-70 text-xs ml-1"></span></button>
-        <button type="button" class="chip" data-smart="drink">À boire <span class="cnt opacity-70 text-xs ml-1"></span></button>
-        <button type="button" class="chip" data-smart="keep">À garder <span class="cnt opacity-70 text-xs ml-1"></span></button>
-        <button type="button" class="chip" data-smart="decline">En déclin <span class="cnt opacity-70 text-xs ml-1"></span></button>
-      </div>
     </div>
 
     <main class="flex flex-col gap-3 mt-1.5" id="list"></main>
@@ -241,6 +235,8 @@
   <div class="sheet pb-safe sheet-anim">
     <h2 class="text-[22px] font-bold" id="infoTitle">Infos produit</h2>
     <div class="mt-3" id="infoBody"></div>
+    <button type="button" class="btn btn-wine w-full mt-4" id="aiBtn">✨ Demander à l’IA</button>
+    <div class="mt-3" id="aiBox"></div>
     <div class="grid grid-cols-2 gap-3 mt-5">
       <button type="button" class="btn btn-dark" id="infoRefresh">🔄 Actualiser</button>
       <button type="button" class="btn btn-wine" id="infoClose">Fermer</button>
@@ -379,7 +375,6 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   const DEFAULT_DIR = {floor:'asc', name:'asc', price:'asc', vintage:'asc', qty:'desc'};
   let QTY_COL = lsGet('maCave.qtyCol') === 'quantity' ? 'quantity' : 'qty';   // colonne de quantité (qty, repli : quantity)
   let editingId = null, currentPhoto = '', lastInfo = null, lookupTok = 0;
-  let smartFilter = (['all','drink','keep','decline'].indexOf(lsGet('maCave.smart')) !== -1) ? lsGet('maCave.smart') : 'all';
   let syncing = false, flushing = null, flushTimer = null, legacyChecked = false, needResync = false;
 
   const listEl = $('list'), qEl = $('q'), overlay = $('overlay'), form = $('form'), errEl = $('err');
@@ -602,7 +597,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     floors = clampFloors(parseInt(lsGet(fk()),10) || meta || DEF_FLOORS);
     ensureFloorsCover();
     lsSet('maCave.lastUser', JSON.stringify({id:u.id, email:u.email || ''}));
-    loadMeta();
+    loadMeta(); loadAI();
     $('accBtn').textContent = (u.email || '?').charAt(0);
     setView('app');
     buildFloorUI(); render();
@@ -1162,6 +1157,135 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   }
 
   /* ------------------------------------------------------------------ */
+  /* Sommelier & Estimation IA (moteur local + recherche multi-bases)     */
+  /* ------------------------------------------------------------------ */
+  const PRESTIGE = [
+    [/romanee.?conti|petrus|\bleroy\b|screaming eagle|\bopus one\b|sassicaia|ornellaia|masseto|\bsolaia\b|\bpenfolds? grange\b|\bsalon\b|krug|\bdom perignon\b|cristal|\begly.?ouriet\b|\bselosse\b/, 55],
+    [/latour|lafite|margaux|haut.?brion|mouton|cheval blanc|\bausone\b|yquem|\bangelus\b|\bpavie\b|\bleoville\b|\bpichon\b|\bcos d.?estournel\b|\bmontrose\b|\bpalmer\b|\bligier\b|\bhermitage\b|\bco?te.?rotie\b|chateauneuf|\bchambertin\b|\bmusigny\b|\bcorton\b|\bmontrachet\b|\bbarolo\b|\bbarbaresco\b|\bbrunello\b|\bamarone\b|\bvega sicilia\b|\bunico\b|\bginestet\b/, 35],
+    [/pauillac|saint.?julien|saint.?estephe|pomerol|saint.?emilion|pessac|sauternes|vosne|gevrey|chambolle|pommard|volnay|meursault|puligny|chassagne|chablis grand|champagne|\bcondrieu\b|\bchianti classico\b|\bribera\b|\bpriorat\b|\brioja reserva\b|\bgran reserva\b|\bporto\b.*(vintage|20|colheita)|\bmosel\b.*(spatlese|auslese)|\bbandol\b/, 18],
+    [/margaux|medoc|haut.?medoc|graves|pernand|savigny|nuits|beaune|santenay|mercurey|sancerre|pouilly|vouvray|\bjurancon\b|\bcornas\b|\bsaint.?joseph\b|\bcrozes\b|\bgigondas\b|\bvacqueyras\b|\balsace grand cru\b/, 8]
+  ];
+  const GOOD_VINT = {1945:1,1947:1,1949:1,1959:1,1961:1,1982:1,1985:.6,1986:.6,1988:.5,1989:1,1990:1,1995:.5,1996:.6,1998:.4,1999:.4,2000:1,2001:.4,2003:.4,2005:1,2006:.5,2008:.3,2009:1,2010:1,2012:.4,2014:.3,2015:.9,2016:1,2017:.3,2018:.9,2019:.9,2020:.8,2022:.7};
+  const WEAK_VINT = {1951:1,1956:1,1963:1,1965:1,1968:1,1972:1,1974:1,1977:1,1984:1,1991:1,1992:1,1993:1,1994:.7,1997:.6,2002:.6,2007:.6,2011:.4,2013:.6,2021:.6};
+  const NOTES = [
+    [/cabernet sauvignon/, 'cassis, cèdre, graphite et poivron mûr'], [/cabernet franc/, 'framboise, crayon, feuille de violette'],
+    [/merlot/, 'prune, cerise noire, chocolat et notes truffées avec l’âge'], [/pinot noir/, 'cerise, framboise, sous-bois et pivoine'],
+    [/syrah|shiraz/, 'mûre, poivre noir, olive et viande fumée'], [/grenache/, 'fruits rouges confits, garrigue et épices douces'],
+    [/sangiovese/, 'cerise acidulée, cuir, tabac et herbes sèches'], [/nebbiolo/, 'rose, goudron, cerise et réglisse'],
+    [/tempranillo/, 'cerise noire, vanille, cuir et tabac'], [/malbec/, 'prune, violette, mûre et touche épicée'],
+    [/gamay/, 'fruits rouges croquants, banane, pivoine'], [/mourvedre/, 'mûre, sous-bois, cuir et épices'],
+    [/zinfandel|primitivo/, 'confiture de fruits noirs, poivre et vanille'], [/carmenere/, 'fruits noirs, poivron, épices'],
+    [/chardonnay/, 'pomme, agrumes, beurre frais, noisette et touche briochée'], [/sauvignon/, 'citron vert, pamplemousse, buis et herbe coupée'],
+    [/chenin/, 'coing, miel, pomme cuite et fleurs blanches'], [/riesling/, 'citron, pêche blanche, minéralité et pétrole avec l’âge'],
+    [/gewurztraminer/, 'litchi, rose, épices douces'], [/pinot gris/, 'poire, miel, fumé léger'], [/viognier/, 'abricot, fleurs blanches, pêche'],
+    [/semillon/, 'cire d’abeille, miel, fruits confits'], [/muscat/, 'raisin frais, fleur d’oranger, agrumes'],
+    [/melon|muscadet/, 'agrumes, iode, pierre à fusil'], [/albarino/, 'agrumes, pêche, sel marin'], [/gruner/, 'poivre blanc, pomme verte, agrumes'],
+    [/glera|prosecco/, 'poire, pomme verte et fleurs blanches']
+  ];
+  const TYPE_NOTES = {R:'fruits rouges et noirs, épices, tannins fondus', B:'agrumes, fruits à chair blanche, fraîcheur minérale', P:'fraise, pamplemousse rose, fraîcheur vive',
+    E:'pomme, brioche, agrumes et bulles fines', L:'abricot, miel, fruits confits, équilibre sucre-acidité', F:'fruits secs, épices, caramel, noix'};
+  const PAIR = {R:'viandes rouges, gibier, fromages affinés', B:'poissons, fruits de mer, volaille, fromages de chèvre', P:'cuisine méditerranéenne, grillades, salades composées',
+    E:'apéritif, huîtres, poissons fins, desserts peu sucrés', L:'foie gras, roquefort, desserts aux fruits', F:'fromages bleus, chocolat noir, noix'};
+  const AIK = () => 'maCave.ai.' + (user ? user.id : '_');
+  let aiStore = {};
+  function loadAI(){ try{ aiStore = JSON.parse(lsGet(AIK()) || '{}') || {}; }catch(e){ aiStore = {}; } }
+  function saveAI(id, r){ aiStore[id] = r; if(user) lsSet(AIK(), JSON.stringify(aiStore)); }
+
+  function aiAnalyze(b, info){
+    const p = wineProfile(b, info || metaOf(b.id).info || null);
+    const txt = norm([b.name, info ? [info.name, info.domain, info.appellation, info.region].join(' ') : ''].join(' '));
+    const age = b.vintage ? Math.max(0, YEAR - b.vintage) : null;
+    const why = []; let score = 20;
+    let pres = 0; for(const x of PRESTIGE){ if(x[0].test(txt)){ pres = x[1]; break; } }
+    if(pres){ score += pres; why.push(pres >= 35 ? 'Nom ou appellation très recherchés' : 'Appellation de prestige'); }
+    let vq = 0;
+    if(b.vintage){
+      if(GOOD_VINT[b.vintage]){ vq = GOOD_VINT[b.vintage]; score += Math.round(12 * vq); why.push('Millésime ' + b.vintage + ' réputé (Europe de l’Ouest)'); }
+      else if(WEAK_VINT[b.vintage]){ vq = -WEAK_VINT[b.vintage]; score -= Math.round(8 * WEAK_VINT[b.vintage]); why.push('Millésime ' + b.vintage + ' plus modeste'); }
+      if(age >= 30){ score += 14; why.push('Bouteille de plus de 30 ans : stock mondial en baisse'); }
+      else if(age >= 15){ score += 8; why.push('Bouteille de plus de 15 ans'); }
+      if(age > p.to){ score -= 12; why.push('Au-delà de la limite de garde estimée'); }
+    } else why.push('Sans millésime : estimation moins fiable');
+    if(b.price >= 200){ score += 14; why.push('Prix de départ élevé'); } else if(b.price >= 60){ score += 7; }
+    if(p.type === 'E' && b.vintage){ score += 5; why.push('Champagne millésimé'); }
+    score = Math.max(0, Math.min(100, score));
+    const rarity = score >= 75 ? 'Icône / très rare' : score >= 55 ? 'Rare et recherché' : score >= 38 ? 'Recherché' : 'Courant';
+    const mult = Math.max(0.9, Math.min(1.6, 1 + (score - 30) / 100 * (pres >= 35 ? 1.0 : 0.6)));
+    const base = valuation(b);
+    const unit = b.price > 0 ? base.unit * mult : 0;
+    const spread = score >= 55 ? 0.3 : 0.18;
+    const pctv = b.price > 0 ? (unit / b.price - 1) * 100 : 0;
+    const grapes = (info && info.grapes && info.grapes.length ? info.grapes : (p.grapesFound.length ? p.grapesFound : p.grapesTypical)) || [];
+    const gtxt = norm(grapes.join(' ') + ' ' + txt);
+    const found = NOTES.filter(n => n[0].test(gtxt)).slice(0, 2).map(n => n[1]);
+    let notes = found.length ? found.join(' ; ') : TYPE_NOTES[p.type] || TYPE_NOTES.R;
+    let evo = '';
+    if(age != null){
+      if(age < p.from) evo = 'Encore jeune : fruit primaire marqué, la structure va s’assouplir.';
+      else if(age <= p.peak) evo = 'En pleine maturité : équilibre entre fruit et complexité.';
+      else if(age <= p.to) evo = 'Évolué : arômes tertiaires (sous-bois, cuir, épices, fruits secs).';
+      else evo = 'Probablement en fin de vie : à ouvrir sans attendre, fraîcheur possiblement diminuée.';
+    }
+    let advice = '';
+    if(age != null){
+      if(age < p.from) advice = 'Garder encore jusqu’en ' + (b.vintage + p.from) + '.';
+      else if(age > p.to) advice = 'À boire maintenant ; revendre n’a plus guère d’intérêt.';
+      else advice = score >= 55 && age <= p.peak ? 'Peut encore se valoriser : à garder jusqu’en ' + (b.vintage + p.peak) + ' ou à boire sur un beau repas.' : 'À boire d’ici ' + (b.vintage + p.to) + '.';
+    }
+    const aeration = p.type === 'R' ? (age != null && age > 15 ? 'Carafer 20 à 30 min seulement (vieux vin fragile).' : 'Carafer 1 h.') : p.type === 'E' ? 'Ouvrir bien frais, sans carafer.' : 'Servir frais, sans carafer.';
+    return {at:Date.now(), score:score, rarity:rarity, mult:mult, unit:unit, low:unit * (1 - spread), high:unit * (1 + spread), pct:pctv,
+      why:why, notes:notes, evo:evo, advice:advice, aeration:aeration, pair:PAIR[p.type] || PAIR.R, tmin:p.tmin, tmax:p.tmax,
+      grapes:grapes, net:!!info};
+  }
+  function aiHTML(b, r, loading){
+    if(!r) return '';
+    const bar = '<div class="h-2 rounded-full bg-black/40 overflow-hidden mt-1"><div class="h-full bg-wine" style="width:' + r.score + '%"></div></div>';
+    const price = b.price > 0
+      ? '<div class="mt-2 text-sm">Cote estimée <b class="text-white text-lg">' + eur.format(r.unit) + '</b> <span class="font-bold ' + (r.pct >= 0 ? 'text-emerald-400' : 'text-red-400') + '">' + (r.pct >= 0 ? '▲ ' : '▼ ') + fmtPct(r.pct) + '</span>' +
+        '<div class="text-xs text-zinc-400">Fourchette ' + eur.format(r.low) + ' – ' + eur.format(r.high) + ' par bouteille · ×' + r.mult.toFixed(2).replace('.', ',') + ' (rareté)</div></div>'
+      : '<p class="text-sm text-zinc-400 mt-2">Renseignez le prix pour obtenir une estimation chiffrée.</p>';
+    const li = t => t ? '<li>' + esc(t) + '</li>' : '';
+    return '<div class="rounded-2xl border border-wine/50 bg-wine/10 p-3.5">' +
+      '<div class="font-bold text-[15px]">✨ Sommelier & Estimation IA</div>' +
+      '<div class="text-xs text-zinc-400 mt-0.5">Rareté : <b class="text-white">' + esc(r.rarity) + '</b> (' + r.score + '/100)</div>' + bar + price +
+      '<div class="mt-3 text-sm leading-snug"><b>Notes de dégustation</b><br>' + esc(r.notes.charAt(0).toUpperCase() + r.notes.slice(1)) + '.' + (r.evo ? ' ' + esc(r.evo) : '') + '</div>' +
+      '<div class="mt-2 text-sm leading-snug"><b>Service</b><br>' + r.tmin + ' – ' + r.tmax + ' °C · ' + esc(r.aeration) + '<br>Accords : ' + esc(r.pair) + '.</div>' +
+      (r.advice ? '<div class="mt-2 text-sm leading-snug"><b>Conseil</b><br>' + esc(r.advice) + '</div>' : '') +
+      '<ul class="mt-2 text-xs text-zinc-400 list-disc pl-4 space-y-0.5">' + r.why.map(li).join('') + '</ul>' +
+      (loading ? spinnerHTML('Recherche dans les bases publiques…') : '') +
+      '<p class="text-[11px] text-zinc-500 mt-2">Analyse automatique par règles œnologiques et recherche dans les bases ouvertes' + (r.net ? ' (bases consultées)' : '') + '. Estimation indicative, ce n’est pas une cote de marché officielle.</p></div>';
+  }
+  let aiTok = 0;
+  function aiLocal(){
+    const b = infoBottle; if(!b) return;
+    const box = $('aiBox'); if(!box) return;
+    let r; try{ r = aiAnalyze(b, metaOf(b.id).info || null); }catch(e){ r = null; }
+    box.innerHTML = r ? aiHTML(b, r, false) : '';
+  }
+  async function askAI(){
+    const b = infoBottle; if(!b) return;
+    const tok = ++aiTok, box = $('aiBox'), btn = $('aiBtn');
+    btn.disabled = true;
+    let info = metaOf(b.id).info || null, r = null;
+    try{ r = aiAnalyze(b, info); box.innerHTML = aiHTML(b, r, true); }catch(e){}
+    const guard = setTimeout(() => { if(tok === aiTok){ btn.disabled = false; const s = box.querySelector('.spinner'); if(s) s.parentNode.remove(); } }, TIMEOUT_MS + 3500);
+    try{
+      const got = await lookupSafe(b.barcode, b.name);
+      if(got){ info = got; setMeta(b.id, got); render(); }
+      r = aiAnalyze(b, info);
+      saveAI(b.id, {score:r.score, rarity:r.rarity, unit:r.unit, at:r.at});
+      if(tok === aiTok && $('infoOverlay').classList.contains('open')){
+        $('infoBody').innerHTML = infoHTML(info, b);
+        box.innerHTML = aiHTML(b, r, false) + (got ? '' : '<p class="text-xs text-amber-400 mt-2">Aucune base n’a répondu : analyse faite d’après le nom et le millésime.</p>');
+      }
+    }catch(e){
+      if(tok === aiTok && r) box.innerHTML = aiHTML(b, r, false);
+    }finally{
+      clearTimeout(guard); if(tok === aiTok){ btn.disabled = false; const s = box.querySelector('.spinner'); if(s) s.parentNode.remove(); }
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Tri, filtre et rendu                                                 */
   /* ------------------------------------------------------------------ */
   function loadSort(){
@@ -1219,6 +1343,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
         (b.barcode ? '<div class="text-xs text-zinc-500 mt-0.5 tracking-wide tabular-nums break-all">▮▯▮ ' + esc(b.barcode) + '</div>' : '') +
         '<div class="flex flex-wrap items-center gap-1.5 mt-2">' +
           '<span class="px-2.5 py-1 rounded-full bg-surface2 border border-line text-xs font-bold mr-1">Étage <span class="text-wine">' + b.floor + '</span></span>' +
+          '<button class="ibtn text-wine" data-act="ai" aria-label="Demander à l’IA"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg></button>' +
           '<button class="ibtn" data-act="info" aria-label="Infos produit"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg></button>' +
           '<button class="ibtn" data-act="edit" aria-label="Modifier"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>' +
           '<button class="ibtn text-red-400" data-act="del" aria-label="Supprimer"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg></button>' +
@@ -1234,18 +1359,6 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       '</div></article>';
   }
 
-  function updateSmartUI(cnt){
-    $('smart').querySelectorAll('.chip').forEach(c => {
-      const k = c.getAttribute('data-smart');
-      c.classList.toggle('chip-on', k === smartFilter);
-      c.querySelector('.cnt').textContent = cnt[k];
-    });
-  }
-  $('smart').addEventListener('click', e => {
-    const c = e.target.closest('.chip'); if(!c) return;
-    smartFilter = c.getAttribute('data-smart'); lsSet('maCave.smart', smartFilter); haptic(); render();
-  });
-
   function render(){
     const term = qEl.value.trim().toLowerCase();
     const cnt = {all:0, drink:0, keep:0, decline:0}, stOf = new Map();
@@ -1254,8 +1367,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       const k = drinkStatus(b).key; stOf.set(b.id, k);
       cnt.all += b.qty; cnt[k] += b.qty; totalV += b.qty * b.price;
     });
-    const shown = items.filter(b => (!term || b.name.toLowerCase().indexOf(term) !== -1) &&
-      (smartFilter === 'all' || stOf.get(b.id) === smartFilter)).sort(sorter());
+    const shown = items.filter(b => !term || b.name.toLowerCase().indexOf(term) !== -1).sort(sorter());
 
     $('totalBottles').textContent = cnt.all;
     $('totalValue').textContent = eur.format(totalV);
@@ -1263,11 +1375,11 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     $('totalEst').innerHTML = items.length
       ? 'Estimée <b class="text-white">' + eur.format(te.est) + '</b> <span class="font-bold ' + (te.pct >= 0 ? 'text-emerald-400' : 'text-red-400') + '">' + (te.pct >= 0 ? '▲ ' : '▼ ') + fmtPct(te.pct) + '</span>'
       : '';
-    updateSortUI(); updateSmartUI(cnt);
+    updateSortUI();
 
     if(!shown.length){
       listEl.innerHTML = '<div class="text-center text-zinc-400 py-12 px-5 leading-relaxed"><div class="text-5xl mb-2">🍾</div>' +
-        (items.length ? (smartFilter !== 'all' && !term ? 'Aucune bouteille dans cette catégorie.' : 'Aucune bouteille ne correspond à votre recherche.')
+        (items.length ? 'Aucune bouteille ne correspond à votre recherche.'
                       : 'Votre cave est vide.<br>Touchez « Ajouter » ou scannez un code-barres.') + '</div>';
       return;
     }
@@ -1283,6 +1395,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     else if(act === 'minus'){ if(b.qty > 0){ b.qty--; haptic(); markDirty(id,'qty'); render(); } }
     else if(act === 'edit') openSheet(b);
     else if(act === 'info') openInfo(b);
+    else if(act === 'ai') openInfo(b, true);
     else if(act === 'del'){
       if(confirm('Supprimer « ' + b.name + ' » de la cave ?')){
         items = items.filter(x => x.id !== id);
@@ -1627,10 +1740,12 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
 
   /* --- Depuis une carte (bouton ℹ︎) --- */
   let infoBottle = null, infoTok = 0;
-  async function openInfo(b){
-    infoBottle = b; $('infoTitle').textContent = b.name;
+  async function openInfo(b, ask){
+    infoBottle = b; $('infoTitle').textContent = b.name; $('aiBtn').disabled = false;
     $('infoOverlay').classList.add('open'); pushLayer('info');
     const mt = metaOf(b.id);
+    aiLocal();
+    if(ask){ if(mt.info) $('infoBody').innerHTML = infoHTML(mt.info, b); else $('infoBody').innerHTML = ''; await askAI(); return; }
     if(mt.info){ $('infoBody').innerHTML = infoHTML(mt.info, b); return; }
     await loadInfo();
   }
@@ -1646,13 +1761,14 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     catch(e){ info = null; }
     finally{ clearTimeout(guard); }
     if(tok !== infoTok || !$('infoOverlay').classList.contains('open')) return;
-    if(info){ setMeta(b.id, info); render(); }
+    if(info){ setMeta(b.id, info); render(); aiLocal(); }
     body.innerHTML = infoHTML(info || metaOf(b.id).info || null, b) +
       (info ? '' : '<p class="text-xs text-amber-400 mt-3">Aucune base n’a répondu pour ce produit (absent ou réseau indisponible) : estimations d’après le nom.</p>');
   }
   function closeInfo(){ $('infoOverlay').classList.remove('open'); popLayer('info'); }
   $('infoClose').addEventListener('click', closeInfo);
   $('infoRefresh').addEventListener('click', loadInfo);
+  $('aiBtn').addEventListener('click', askAI);
   $('infoOverlay').addEventListener('click', e => { if(e.target === $('infoOverlay')) closeInfo(); });
 
   /* ------------------------------------------------------------------ */
