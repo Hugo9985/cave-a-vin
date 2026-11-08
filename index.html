@@ -140,6 +140,7 @@
       <div class="rounded-[20px] border border-line p-4 bg-gradient-to-br from-surface to-surface2">
         <small class="block text-[13px] uppercase tracking-wider text-zinc-400">Valeur totale</small>
         <b class="block text-[26px] mt-1.5 font-bold tabular-nums text-wine" id="totalValue">0 €</b>
+        <span class="block text-[13px] mt-1 text-zinc-400 leading-tight" id="totalEst"></span>
       </div>
     </section>
 
@@ -160,6 +161,12 @@
         <button type="button" class="chip" data-sort="price">Prix <span class="arr"></span></button>
         <button type="button" class="chip" data-sort="vintage">Millésime <span class="arr"></span></button>
         <button type="button" class="chip" data-sort="qty">Quantité <span class="arr"></span></button>
+      </div>
+      <div class="scroll-x flex gap-2 mt-2" id="smart">
+        <button type="button" class="chip" data-smart="all">Tous <span class="cnt opacity-70 text-xs ml-1"></span></button>
+        <button type="button" class="chip" data-smart="drink">À boire <span class="cnt opacity-70 text-xs ml-1"></span></button>
+        <button type="button" class="chip" data-smart="keep">À garder <span class="cnt opacity-70 text-xs ml-1"></span></button>
+        <button type="button" class="chip" data-smart="decline">En déclin <span class="cnt opacity-70 text-xs ml-1"></span></button>
       </div>
     </div>
 
@@ -257,6 +264,29 @@
   </div>
 </div>
 
+<!-- Réglages de valorisation -->
+<div class="ovl" id="settingsOverlay">
+  <div class="sheet pb-safe sheet-anim">
+    <h2 class="text-[22px] font-bold">Valorisation et prix</h2>
+    <p class="text-zinc-400 text-sm mt-1 leading-snug">Valeur estimée = prix × (1 + taux)<sup>âge</sup>. La hausse s’arrête à l’apogée du vin, reste stable jusqu’à la limite de garde, puis baisse d’environ 6 % par an. Estimation indicative, pas une cote de marché.</p>
+    <label class="lbl" for="setRate">Taux d’appréciation annuel moyen (%)</label>
+    <div class="flex gap-2.5">
+      <button type="button" id="rateMinus" aria-label="Moins" class="shrink-0 w-16 h-14 rounded-2xl bg-line text-white text-3xl font-semibold leading-none active:scale-90 transition">−</button>
+      <input id="setRate" class="field flex-1 min-w-0 text-center font-bold" type="number" inputmode="decimal" min="0" max="25" step="0.5">
+      <button type="button" id="ratePlus" aria-label="Plus" class="shrink-0 w-16 h-14 rounded-2xl bg-wine text-white text-3xl font-semibold leading-none active:scale-90 transition">+</button>
+    </div>
+    <label class="lbl" for="setBasis">Le prix saisi correspond à</label>
+    <select id="setBasis" class="field">
+      <option value="vintage">Prix à la sortie du millésime (appréciation depuis l’année du vin)</option>
+      <option value="added">Mon prix d’achat (appréciation depuis la date d’ajout)</option>
+    </select>
+    <div class="grid grid-cols-[1fr_1.4fr] gap-3 mt-5">
+      <button type="button" class="btn btn-dark" id="setCancel">Annuler</button>
+      <button type="button" class="btn btn-wine" id="setSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <!-- Compte -->
 <div class="ovl" id="accOverlay">
   <div class="sheet pb-safe sheet-anim">
@@ -265,6 +295,7 @@
     <p class="text-zinc-400 text-sm mt-2 leading-snug" id="accInfo"></p>
     <div class="flex flex-col gap-2.5 mt-4">
       <button type="button" class="btn btn-wine" id="syncNow">🔄 Synchroniser maintenant</button>
+      <button type="button" class="btn btn-dark" id="valBtn">📈 Valorisation et prix</button>
       <button type="button" class="btn btn-dark" id="floorsBtn">🗄️ Gérer les étages</button>
       <button type="button" class="btn btn-dark" id="installBtn" hidden>📲 Installer l'application</button>
       <button type="button" class="btn btn-danger inline-flex items-center justify-center gap-2" id="logoutBtn"><span class="ico"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></span>Se déconnecter</button>
@@ -273,25 +304,31 @@
   </div>
 </div>
 
-<!-- Scanner (BarcodeDetector natif + ZXing, torche, zoom, mise au point continue) -->
+<!-- Scanner haute précision (BarcodeDetector natif + ZXing multi-zones, torche, zoom auto, photo HD) -->
 <div id="scanner" class="fixed inset-0 z-[70] bg-black hidden flex-col" style="padding:calc(14px + var(--safe-top)) 14px calc(14px + var(--safe-bottom))">
   <h2 class="text-[22px] font-bold text-center">Scanner un code-barres</h2>
   <p class="text-zinc-400 text-sm text-center mt-1 mb-3" id="scanHint"></p>
   <div class="relative flex-1 min-h-0 rounded-3xl overflow-hidden bg-black border border-line max-w-xl w-full mx-auto" id="viewport">
     <video id="video" playsinline muted autoplay></video>
     <div class="absolute inset-0 grid place-items-center pointer-events-none">
-      <div class="w-[88%] h-[34%] rounded-2xl border-2 border-wine shadow-[0_0_0_9999px_rgba(0,0,0,.45)]"></div>
+      <div class="w-[84%] h-[44%] rounded-2xl border-2 border-wine shadow-[0_0_0_9999px_rgba(0,0,0,.45)]"></div>
     </div>
+    <div id="resInfo" class="absolute bottom-3 left-3 text-[11px] text-white/80 bg-black/55 rounded-md px-2 py-0.5"></div>
     <div class="absolute top-3 right-3 flex flex-col gap-2">
       <button type="button" id="torchBtn" class="w-12 h-12 rounded-full bg-black/60 border border-white/20 text-xl active:scale-90 transition" aria-label="Torche" hidden>🔦</button>
     </div>
   </div>
   <div class="max-w-xl w-full mx-auto mt-3" id="zoomWrap" hidden>
-    <label class="text-xs uppercase tracking-wider text-zinc-400">Zoom</label>
+    <div class="flex items-center justify-between mb-1">
+      <label class="text-xs uppercase tracking-wider text-zinc-400">Zoom</label>
+      <button type="button" id="autoZoomBtn" class="px-3 h-8 rounded-full border border-line bg-surface2 text-xs font-bold">Zoom auto : OUI</button>
+    </div>
     <input id="zoomRange" type="range" class="w-full accent-[#c0395a]" min="1" max="4" step="0.1" value="1">
   </div>
   <div class="text-center text-[15px] leading-snug py-3 min-h-[56px]" id="scanStatus"></div>
+  <input class="hidden" id="hdInput" type="file" accept="image/*" capture="environment">
   <div class="max-w-xl w-full mx-auto grid grid-cols-[1fr_1fr] gap-3">
+    <button type="button" class="btn btn-dark col-span-2" id="scanPhoto">📷 Photo haute définition du code</button>
     <button type="button" class="btn btn-dark" id="scanManual">⌨️ Saisir le code</button>
     <button type="button" class="btn btn-dark" id="scanClose">Fermer</button>
   </div>
@@ -342,6 +379,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   const DEFAULT_DIR = {floor:'asc', name:'asc', price:'asc', vintage:'asc', qty:'desc'};
   let QTY_COL = lsGet('maCave.qtyCol') === 'quantity' ? 'quantity' : 'qty';   // colonne de quantité (qty, repli : quantity)
   let editingId = null, currentPhoto = '', lastInfo = null, lookupTok = 0;
+  let smartFilter = (['all','drink','keep','decline'].indexOf(lsGet('maCave.smart')) !== -1) ? lsGet('maCave.smart') : 'all';
   let syncing = false, flushing = null, flushTimer = null, legacyChecked = false, needResync = false;
 
   const listEl = $('list'), qEl = $('q'), overlay = $('overlay'), form = $('form'), errEl = $('err');
@@ -539,7 +577,12 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   const ck = () => 'maCave.items.' + user.id;
   const dk = () => 'maCave.dirty.' + user.id;
   const fk = () => 'maCave.floors.' + user.id;
-  function persistCache(){ if(user) lsSet(ck(), JSON.stringify(items)); }
+  function persistCache(){
+    if(!user) return;
+    if(lsSet(ck(), JSON.stringify(items))) return;
+    /* quota dépassé : on conserve les données sans les photos */
+    lsSet(ck(), JSON.stringify(items.map(b => Object.assign({}, b, {photo:''}))));
+  }
   function persistDirty(){ if(user) lsSet(dk(), JSON.stringify(dirty)); }
 
   function clampFloors(n){ n = parseInt(n,10); return isNaN(n) ? DEF_FLOORS : Math.max(1, Math.min(MAX_FLOORS, n)); }
@@ -559,6 +602,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     floors = clampFloors(parseInt(lsGet(fk()),10) || meta || DEF_FLOORS);
     ensureFloorsCover();
     lsSet('maCave.lastUser', JSON.stringify({id:u.id, email:u.email || ''}));
+    loadMeta();
     $('accBtn').textContent = (u.email || '?').charAt(0);
     setView('app');
     buildFloorUI(); render();
@@ -566,7 +610,8 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     sync();
   }
   function leaveApp(){
-    if(user){ lsDel(ck()); lsDel(dk()); lsDel(fk()); }
+    if(user){ lsDel(ck()); lsDel(dk()); lsDel(fk()); lsDel(metaKey()); }
+    meta = {}; PCACHE.clear();
     user = null; items = []; dirty = {}; rev = {};
     closeAllLayers();
   }
@@ -845,6 +890,278 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   $('floorOverlay').addEventListener('click', e => { if(e.target === $('floorOverlay')) closeFloors(); });
 
   /* ------------------------------------------------------------------ */
+  /* Profil du vin : garde, température, statut, valorisation             */
+  /* ------------------------------------------------------------------ */
+  const YEAR = new Date().getFullYear();
+
+  /* Appellations : noms (séparés par /) | région | pays | cépages typiques | type | à boire dès | apogée jusqu'à | limite | T° min | T° max
+     Types : R rouge · B blanc · P rosé · E effervescent · L liquoreux · F fortifié. Durées indicatives, en années après le millésime. */
+  const APPEL_RAW = [
+    'Pauillac|Bordeaux (Médoc)|France|Cabernet Sauvignon, Merlot|R|8|20|35|16|18',
+    'Margaux|Bordeaux (Médoc)|France|Cabernet Sauvignon, Merlot|R|7|18|30|16|18',
+    'Saint-Julien|Bordeaux (Médoc)|France|Cabernet Sauvignon, Merlot|R|7|18|30|16|18',
+    'Saint-Estèphe|Bordeaux (Médoc)|France|Cabernet Sauvignon, Merlot|R|7|18|30|16|18',
+    'Haut-Médoc|Bordeaux (Médoc)|France|Cabernet Sauvignon, Merlot|R|4|12|20|16|18',
+    'Médoc|Bordeaux (Médoc)|France|Cabernet Sauvignon, Merlot|R|3|10|16|16|18',
+    'Pomerol|Bordeaux (Libournais)|France|Merlot, Cabernet Franc|R|6|18|30|16|18',
+    'Saint-Émilion|Bordeaux (Libournais)|France|Merlot, Cabernet Franc|R|5|15|25|16|18',
+    'Fronsac/Canon-Fronsac|Bordeaux (Libournais)|France|Merlot, Cabernet Franc|R|4|12|20|16|18',
+    'Pessac-Léognan|Bordeaux (Graves)|France|Cabernet Sauvignon, Merlot|R|5|15|25|16|18',
+    'Graves|Bordeaux (Graves)|France|Merlot, Cabernet Sauvignon|R|3|10|16|16|18',
+    'Bordeaux Supérieur|Bordeaux|France|Merlot, Cabernet Sauvignon|R|2|7|12|16|18',
+    'Bordeaux|Bordeaux|France|Merlot, Cabernet Sauvignon|R|2|6|10|16|18',
+    'Gevrey-Chambertin/Chambertin|Bourgogne (Côte de Nuits)|France|Pinot Noir|R|5|14|25|15|17',
+    'Chambolle-Musigny/Musigny|Bourgogne (Côte de Nuits)|France|Pinot Noir|R|5|14|25|15|17',
+    'Vosne-Romanée/Romanée-Conti/Richebourg/La Tâche|Bourgogne (Côte de Nuits)|France|Pinot Noir|R|6|16|30|15|17',
+    'Nuits-Saint-Georges/Morey-Saint-Denis/Clos de Vougeot|Bourgogne (Côte de Nuits)|France|Pinot Noir|R|5|14|25|15|17',
+    'Pommard/Volnay/Beaune|Bourgogne (Côte de Beaune)|France|Pinot Noir|R|4|12|20|15|17',
+    'Aloxe-Corton/Corton|Bourgogne (Côte de Beaune)|France|Pinot Noir|R|5|14|25|15|17',
+    'Mercurey/Givry/Santenay|Bourgogne (Côte chalonnaise)|France|Pinot Noir|R|2|7|12|15|17',
+    'Bourgogne|Bourgogne|France|Pinot Noir|R|2|7|12|15|17',
+    'Bourgogne|Bourgogne|France|Chardonnay|B|1|4|8|10|12',
+    'Morgon/Moulin-à-Vent/Fleurie/Brouilly/Chiroubles/Juliénas/Chénas/Régnié/Saint-Amour|Beaujolais|France|Gamay|R|2|6|10|13|15',
+    'Beaujolais|Beaujolais|France|Gamay|R|0|2|4|12|14',
+    'Hermitage|Rhône (Nord)|France|Syrah|R|6|18|30|16|18',
+    'Côte-Rôtie|Rhône (Nord)|France|Syrah|R|6|16|25|16|18',
+    'Cornas|Rhône (Nord)|France|Syrah|R|5|15|25|16|18',
+    'Crozes-Hermitage/Saint-Joseph|Rhône (Nord)|France|Syrah|R|2|8|14|16|18',
+    'Châteauneuf-du-Pape|Rhône (Sud)|France|Grenache, Syrah, Mourvèdre|R|4|15|25|16|18',
+    'Gigondas/Vacqueyras|Rhône (Sud)|France|Grenache, Syrah, Mourvèdre|R|3|10|18|16|18',
+    'Côtes du Rhône|Rhône|France|Grenache, Syrah|R|1|5|8|15|17',
+    'Condrieu|Rhône (Nord)|France|Viognier|B|1|5|10|10|12',
+    'Bandol|Provence|France|Mourvèdre, Grenache|R|4|12|20|16|18',
+    'Côtes de Provence/Provence|Provence|France|Grenache, Cinsault, Syrah|P|0|1|3|8|10',
+    'Tavel|Rhône (Sud)|France|Grenache, Cinsault|P|0|3|6|8|10',
+    'Cahors|Sud-Ouest|France|Malbec|R|4|12|20|16|18',
+    'Madiran|Sud-Ouest|France|Tannat|R|4|12|22|16|18',
+    'Chinon/Bourgueil/Saumur-Champigny|Loire|France|Cabernet Franc|R|2|8|15|14|16',
+    'Languedoc/Corbières/Minervois/Faugères/Saint-Chinian/Pic Saint-Loup|Languedoc|France|Grenache, Syrah, Carignan|R|1|6|10|15|17',
+    'Roussillon/Côtes du Roussillon/Collioure|Roussillon|France|Grenache, Syrah, Carignan|R|2|7|12|15|17',
+    'Banyuls/Maury/Rivesaltes|Roussillon|France|Grenache|F|2|15|40|14|16',
+    'Chablis Grand Cru|Bourgogne (Chablis)|France|Chardonnay|B|4|12|20|10|12',
+    'Chablis Premier Cru|Bourgogne (Chablis)|France|Chardonnay|B|2|8|14|10|12',
+    'Chablis|Bourgogne (Chablis)|France|Chardonnay|B|1|5|10|9|11',
+    'Meursault|Bourgogne (Côte de Beaune)|France|Chardonnay|B|3|10|18|11|13',
+    'Puligny-Montrachet/Chassagne-Montrachet/Montrachet/Corton-Charlemagne|Bourgogne (Côte de Beaune)|France|Chardonnay|B|4|12|22|11|13',
+    'Pouilly-Fuissé/Saint-Véran|Bourgogne (Mâconnais)|France|Chardonnay|B|2|7|12|10|12',
+    'Mâcon|Bourgogne (Mâconnais)|France|Chardonnay|B|0|3|6|9|11',
+    'Sancerre/Pouilly-Fumé/Quincy/Menetou-Salon|Loire|France|Sauvignon Blanc|B|0|3|6|8|10',
+    'Muscadet|Loire|France|Melon de Bourgogne|B|0|3|6|7|9',
+    'Vouvray/Montlouis|Loire|France|Chenin Blanc|B|2|10|25|9|11',
+    'Savennières/Anjou|Loire|France|Chenin Blanc|B|3|12|25|10|12',
+    'Vendanges tardives|Alsace|France|Gewurztraminer, Pinot Gris, Riesling|L|4|15|30|8|10',
+    'Sélection de grains nobles|Alsace|France|Gewurztraminer, Pinot Gris, Riesling|L|5|20|40|8|10',
+    'Alsace Grand Cru|Alsace|France|Riesling, Gewurztraminer, Pinot Gris|B|4|12|25|10|12',
+    'Alsace|Alsace|France|Riesling, Gewurztraminer, Pinot Gris|B|2|8|15|9|11',
+    'Sauternes/Barsac|Bordeaux (Sauternais)|France|Sémillon, Sauvignon Blanc|L|5|25|50|8|10',
+    'Monbazillac|Bergerac|France|Sémillon, Sauvignon Blanc|L|3|15|30|8|10',
+    'Tokaji|Tokaj|Hongrie|Furmint|L|5|25|50|8|10',
+    'Champagne|Champagne|France|Chardonnay, Pinot Noir, Pinot Meunier|E|0|4|8|6|8',
+    'Crémant|Plusieurs régions|France|Chardonnay, Pinot Noir, Chenin Blanc|E|0|2|4|6|8',
+    'Prosecco|Vénétie|Italie|Glera|E|0|1|2|6|8',
+    'Franciacorta|Lombardie|Italie|Chardonnay, Pinot Noir|E|1|4|8|6|8',
+    'Cava|Catalogne|Espagne|Macabeo, Xarel·lo, Parellada|E|0|2|4|6|8',
+    'Barolo|Piémont|Italie|Nebbiolo|R|8|20|35|16|18',
+    'Barbaresco|Piémont|Italie|Nebbiolo|R|7|18|30|16|18',
+    'Brunello di Montalcino|Toscane|Italie|Sangiovese|R|8|20|30|16|18',
+    'Chianti Classico|Toscane|Italie|Sangiovese|R|3|10|16|16|18',
+    'Chianti|Toscane|Italie|Sangiovese|R|2|7|12|15|17',
+    'Amarone|Vénétie|Italie|Corvina, Rondinella|R|8|20|30|16|18',
+    'Valpolicella|Vénétie|Italie|Corvina, Rondinella|R|2|6|10|15|17',
+    'Rioja|La Rioja|Espagne|Tempranillo|R|4|12|20|16|18',
+    'Ribera del Duero|Castille-et-León|Espagne|Tempranillo|R|4|14|22|16|18',
+    'Priorat|Catalogne|Espagne|Grenache, Carignan|R|4|14|22|16|18',
+    'Douro|Douro|Portugal|Touriga Nacional, Tinta Roriz|R|3|10|18|16|18',
+    'Porto|Douro|Portugal|Touriga Nacional, Tinta Roriz|F|2|25|50|14|18',
+    'Napa Valley/Napa|Californie|États-Unis|Cabernet Sauvignon|R|5|15|25|16|18',
+    'Sonoma|Californie|États-Unis|Pinot Noir, Zinfandel|R|3|10|16|15|17',
+    'Mendoza|Mendoza|Argentine|Malbec|R|2|8|12|16|18',
+    'Barossa|Australie-Méridionale|Australie|Shiraz|R|4|12|20|16|18',
+    'Marlborough|Marlborough|Nouvelle-Zélande|Sauvignon Blanc|B|0|2|4|8|10',
+    'Stellenbosch|Western Cape|Afrique du Sud|Cabernet Sauvignon, Pinotage|R|3|10|16|16|18',
+    'Mosel|Moselle|Allemagne|Riesling|B|2|10|25|8|10'
+  ];
+  const TYPE_DEF = {
+    R:{label:'Rouge', from:2, peak:8, to:14, t:[16,18]},
+    B:{label:'Blanc', from:0, peak:3, to:6, t:[9,11]},
+    P:{label:'Rosé', from:0, peak:1, to:3, t:[8,10]},
+    E:{label:'Effervescent', from:0, peak:3, to:6, t:[6,8]},
+    L:{label:'Liquoreux / doux', from:3, peak:15, to:30, t:[8,10]},
+    F:{label:'Fortifié', from:2, peak:15, to:30, t:[14,16]}
+  };
+  const TYPE_CODE = {'rouge':'R','blanc':'B','rose':'P','effervescent':'E','liquoreux / doux':'L','fortifie':'F'};
+  const GCLASS = [
+    ['R', /gamay|pinot noir|cinsault|poulsard|trousseau/, {from:1, peak:5, to:9, t:[14,16]}],
+    ['R', /cabernet sauvignon|nebbiolo|tannat|syrah|shiraz|mourvedre|malbec|petit verdot|touriga/, {from:3, peak:10, to:18, t:[16,18]}],
+    ['B', /sauvignon blanc|melon de bourgogne|pinot grigio|albarino|vermentino|picpoul|aligote|verdejo|gruner/, {from:0, peak:2, to:4, t:[8,10]}],
+    ['B', /riesling/, {from:2, peak:8, to:15, t:[8,10]}],
+    ['B', /chardonnay|viognier|chenin|marsanne|roussanne|semillon/, {from:1, peak:5, to:10, t:[10,12]}]
+  ];
+  /* Cépages reconnus dans les textes : « Nom affiché=expression » (expression facultative) */
+  const GRAPES_RAW = ['Cabernet Sauvignon','Cabernet Franc','Merlot','Pinot Noir','Pinot Gris','Pinot Blanc','Pinot Meunier=meunier','Chardonnay','Sauvignon Blanc','Sémillon','Muscadelle','Syrah=syrah|shiraz','Grenache=grenache|garnacha','Mourvèdre=mourvedre|monastrell','Carignan','Cinsault','Malbec=malbec|cot','Tannat','Gamay','Chenin Blanc=chenin','Viognier','Marsanne','Roussanne','Riesling','Gewurztraminer','Muscat','Melon de Bourgogne','Aligoté=aligote','Colombard','Ugni Blanc','Sangiovese','Nebbiolo','Barbera','Montepulciano','Corvina','Primitivo=primitivo|zinfandel','Glera','Vermentino','Trebbiano','Tempranillo=tempranillo|tinta roriz','Albariño=albarino','Verdejo','Touriga Nacional','Pinotage','Carmenère=carmenere','Petit Verdot','Grüner Veltliner=gruner veltliner','Furmint','Melon','Picpoul','Sylvaner','Poulsard','Savagnin','Mauzac','Négrette=negrette','Petit Manseng','Gros Manseng'];
+
+  const APPEL = [];
+  APPEL_RAW.forEach(line => {
+    const f = line.split('|');
+    f[0].split('/').forEach(n => {
+      const k = norm(n).replace(/[^a-z0-9 -]/g, '');
+      APPEL.push({
+        name:n, k:k, re:new RegExp('(^|[^a-z])' + k.replace(/[-\s]+/g, "[-\\s']?") + '([^a-z]|$)'),
+        region:f[1], country:f[2], grapes:f[3].split(',').map(s => s.trim()), type:f[4],
+        from:+f[5], peak:+f[6], to:+f[7], tmin:+f[8], tmax:+f[9]
+      });
+    });
+  });
+  APPEL.sort((a,b) => b.k.length - a.k.length);
+  const GRAPES = GRAPES_RAW.map(s => {
+    const p = s.split('='), disp = p[0];
+    return {name:disp, re:new RegExp('(^|[^a-z])(' + (p[1] || norm(disp)).replace(/[-\s]+/g, "[-\\s]?") + ')([^a-z]|$)')};
+  });
+  function mineGrapes(txt){ return GRAPES.filter(g => g.re.test(txt)).map(g => g.name).slice(0, 5); }
+
+  function explicitType(t){
+    if(/champagne|cremant|prosecco|\bcava\b|franciacorta|mousseux|petillant|sparkling|\bbrut\b|spumante/.test(t)) return 'E';
+    if(/sauternes|barsac|liquoreux|moelleux|vendanges? tardives?|grains? nobles?|tokaji|monbazillac|passito|\bsweet\b|\bdoux\b/.test(t)) return 'L';
+    if(/\bporto\b|\bport\b|banyuls|\bmaury\b|rivesaltes|\bxeres\b|sherry|madere|marsala|fortifi/.test(t)) return 'F';
+    if(/\bros(e|ado|ato)\b/.test(t) && !/\b(rouge|red|rosso|tinto)\b/.test(t)) return 'P';
+    if(/\b(blanc|white|bianco|blanco|weiss)\b/.test(t)) return 'B';
+    if(/\b(rouge|red|rosso|tinto|rot)\b/.test(t)) return 'R';
+    return '';
+  }
+  function typeCode(label){ return TYPE_CODE[norm(label).trim()] || ''; }
+
+  /* ---- Données enrichies mémorisées sur l'appareil (par bouteille) ---- */
+  let meta = {};
+  const PCACHE = new Map();
+  const metaKey = () => 'maCave.meta.' + (user ? user.id : '_');
+  function loadMeta(){ try{ meta = JSON.parse(lsGet(metaKey()) || '{}') || {}; }catch(e){ meta = {}; } PCACHE.clear(); }
+  function metaOf(id){ return meta[id] || {}; }
+  function slimInfo(i){
+    return {code:i.code, name:i.name, domain:i.domain, appellation:i.appellation, region:i.region, country:i.country,
+      grapes:i.grapes, type:i.type, alcohol:i.alcohol, quantity:i.quantity, labels:i.labels,
+      categoriesText:i.categoriesText, description:String(i.description || '').slice(0, 400), image:i.image,
+      sources:i.sources, grapesTypical:!!i.grapesTypical};
+  }
+  function setMeta(id, info){
+    if(!id || !info) return;
+    meta[id] = {info:slimInfo(info), at:Date.now()}; PCACHE.clear();
+    if(user && !lsSet(metaKey(), JSON.stringify(meta))){ /* quota : on garde en mémoire seulement */ }
+  }
+  function dropMeta(id){ if(meta[id]){ delete meta[id]; PCACHE.clear(); if(user) lsSet(metaKey(), JSON.stringify(meta)); } }
+
+  /* ---- Profil : type, garde, température ---- */
+  function wineProfile(b, infoOv){
+    const mt = metaOf(b.id), info = infoOv || mt.info || null, key = b.id + '|' + b.name + '|' + (mt.at || 0);
+    if(!infoOv && PCACHE.has(key)) return PCACHE.get(key);
+    const nameN = norm(b.name);
+    const txt = norm([b.name, info ? [info.name, info.appellation, info.region, info.country, (info.grapes || []).join(' '), info.categoriesText].join(' ') : ''].join(' '));
+    const ms = APPEL.filter(a => a.re.test(txt));
+    let type = explicitType(nameN) || typeCode(info && info.type) || explicitType(txt) || (ms[0] ? ms[0].type : '');
+    const guessType = !type; if(!type) type = 'R';
+    const loc = ms.find(a => a.type === type) || ms[0] || null;
+    const ap = loc && loc.type === type ? loc : null;
+    const td = TYPE_DEF[type];
+    let from = td.from, peak = td.peak, to = td.to, t = td.t.slice(), basis = 'type';
+    if(ap){ from = ap.from; peak = ap.peak; to = ap.to; t = [ap.tmin, ap.tmax]; basis = 'appellation'; }
+    else{
+      const g = GCLASS.find(c => c[0] === type && c[1].test(txt));
+      if(g){ from = g[2].from; peak = g[2].peak; to = g[2].to; t = g[2].t.slice(); basis = 'cépage'; }
+    }
+    if(type === 'E' && b.vintage && /champagne/.test(txt)){ from = 5; peak = 15; to = 25; t = [8,10]; basis = 'champagne millésimé'; }
+    const p = {
+      type:type, typeLabel:td.label, from:from, peak:peak, to:to, tmin:t[0], tmax:t[1], basis:basis, guessType:guessType,
+      appel: loc ? loc.name : '', region: loc ? loc.region : '', country: loc ? loc.country : '',
+      grapesTypical: loc ? loc.grapes : [], grapesFound: mineGrapes(txt)
+    };
+    if(!infoOv) PCACHE.set(key, p);
+    return p;
+  }
+
+  /* ---- Statut : À boire / À garder / En déclin ---- */
+  const STATUS = {
+    keep:{label:'À garder', cls:'text-sky-300 border-sky-400/40 bg-sky-400/10'},
+    drink:{label:'À boire', cls:'text-emerald-300 border-emerald-400/40 bg-emerald-400/10'},
+    decline:{label:'En déclin', cls:'text-orange-300 border-orange-400/40 bg-orange-400/10'}
+  };
+  function drinkStatus(b){
+    const p = wineProfile(b);
+    if(!b.vintage) return {key:'drink', sub:'sans millésime : prêt à boire', p:p, age:null};
+    const age = YEAR - b.vintage;
+    if(age < p.from) return {key:'keep', sub:'prêt vers ' + (b.vintage + p.from), p:p, age:age};
+    if(age > p.to) return {key:'decline', sub:'limite estimée ' + (b.vintage + p.to) + ' dépassée', p:p, age:age};
+    return {key:'drink', sub: age <= p.peak ? 'apogée jusqu’en ' + (b.vintage + p.peak) : 'à boire avant ' + (b.vintage + p.to), p:p, age:age};
+  }
+
+  /* ---- Valorisation : valeur estimée selon millésime, âge et taux d'appréciation ---- */
+  let settings = {rate:4, basis:'vintage'};
+  function loadSettings(){
+    try{
+      const s = JSON.parse(lsGet('maCave.settings') || 'null');
+      if(s){
+        const r = parseFloat(s.rate); if(!isNaN(r)) settings.rate = Math.max(0, Math.min(25, r));
+        if(s.basis === 'vintage' || s.basis === 'added') settings.basis = s.basis;
+      }
+    }catch(e){}
+  }
+  function saveSettings(){ lsSet('maCave.settings', JSON.stringify(settings)); }
+  function growth(a, p, r){
+    a = Math.max(0, a);
+    return Math.pow(1 + r, Math.min(a, p.peak)) * Math.pow(0.94, Math.max(0, a - p.to));
+  }
+  function valuation(b){
+    const p = wineProfile(b);
+    if(!b.vintage || !(b.price > 0)) return {unit:b.price, total:b.price * b.qty, pct:0, na:true, p:p, age:0, a0:0};
+    const r = settings.rate / 100, age = Math.max(0, YEAR - b.vintage);
+    let a0 = 0;
+    if(settings.basis === 'added'){
+      const y = new Date(b.created_at).getFullYear();
+      a0 = isNaN(y) ? age : Math.max(0, Math.min(age, y - b.vintage));
+    }
+    const unit = b.price * growth(age, p, r) / growth(a0, p, r);
+    return {unit:unit, total:unit * b.qty, pct:(unit / b.price - 1) * 100, na:false, p:p, age:age, a0:a0};
+  }
+  function fmtPct(x){ return (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(1).replace('.', ',') + ' %'; }
+  function totalsEst(){
+    let base = 0, est = 0;
+    items.forEach(b => { base += b.qty * b.price; est += valuation(b).unit * b.qty; });
+    return {base:base, est:est, pct: base > 0 ? (est / base - 1) * 100 : 0};
+  }
+  function curve(b, n){
+    const v = valuation(b), r = settings.rate / 100;
+    const a1 = Math.max(v.p.to + 4, v.age + 3), pts = [];
+    for(let i = 0; i <= n; i++){
+      const a = v.a0 + (a1 - v.a0) * i / n;
+      pts.push({a:a, v:b.price * growth(a, v.p, r) / growth(v.a0, v.p, r)});
+    }
+    return {pts:pts, a0:v.a0, a1:a1, v:v};
+  }
+  /* Courbe d'évolution : mini (carte) ou grande (fiche) */
+  function chartSVG(b, big){
+    const c = curve(b, 36), v = c.v; if(v.na) return '';
+    const W = big ? 320 : 64, H = big ? 150 : 26, L = big ? 46 : 2, R = big ? 8 : 2, T = big ? 12 : 3, B = big ? 26 : 3;
+    const vs = c.pts.map(p => p.v), lo = Math.min.apply(null, vs), hi = Math.max.apply(null, vs), span = (hi - lo) || (hi * 0.1 || 1);
+    const x = a => L + (a - c.a0) / ((c.a1 - c.a0) || 1) * (W - L - R);
+    const y = val => T + (1 - (val - lo) / span) * (H - T - B);
+    const d = c.pts.map((p,i) => (i ? 'L' : 'M') + x(p.a).toFixed(1) + ' ' + y(p.v).toFixed(1)).join('');
+    const col = v.pct >= 0 ? '#3ddc84' : '#ff5a50';
+    const nx = x(Math.min(v.age, c.a1)).toFixed(1), ny = y(v.unit).toFixed(1);
+    let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="' + (big ? 'w-full' : 'w-16 h-[26px] shrink-0') + '" role="img" aria-label="Évolution estimée de la valeur">';
+    if(big){
+      const x1 = x(Math.max(c.a0, v.p.from)), x2 = x(Math.min(c.a1, v.p.to));
+      if(x2 > x1) s += '<rect x="' + x1.toFixed(1) + '" y="' + T + '" width="' + (x2 - x1).toFixed(1) + '" height="' + (H - T - B) + '" fill="rgba(61,220,132,.13)"/>';
+      s += '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" stroke="#32323d"/>' +
+        '<text x="' + (L - 4) + '" y="' + (T + 8) + '" text-anchor="end" font-size="10" fill="#9a9aa8">' + Math.round(hi) + ' €</text>' +
+        '<text x="' + (L - 4) + '" y="' + (H - B) + '" text-anchor="end" font-size="10" fill="#9a9aa8">' + Math.round(lo) + ' €</text>' +
+        '<text x="' + L + '" y="' + (H - 8) + '" font-size="10" fill="#9a9aa8">' + (b.vintage + Math.round(c.a0)) + '</text>' +
+        '<text x="' + (W - R) + '" y="' + (H - 8) + '" text-anchor="end" font-size="10" fill="#9a9aa8">' + (b.vintage + Math.round(c.a1)) + '</text>' +
+        '<text x="' + nx + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="' + col + '">' + YEAR + '</text>';
+    }
+    s += '<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="' + (big ? 2.2 : 1.6) + '" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="' + nx + '" cy="' + ny + '" r="' + (big ? 4 : 2.6) + '" fill="' + col + '"/></svg>';
+    return s;
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Tri, filtre et rendu                                                 */
   /* ------------------------------------------------------------------ */
   function loadSort(){
@@ -888,11 +1205,17 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   function cardHTML(b){
     const vint = b.vintage ? b.vintage : 'Sans millésime';
     const photo = b.photo ? '<img src="' + esc(b.photo) + '" alt="" loading="lazy" class="w-full h-full object-cover block">' : '🍷';
+    const st = drinkStatus(b), S = STATUS[st.key], v = valuation(b);
+    const est = v.na ? '' : '<div class="flex items-center gap-2 mt-1.5">' + chartSVG(b, false) +
+      '<div class="text-[13px] leading-tight"><span class="text-zinc-400">Estimée</span> <b class="text-white">' + eur.format(v.unit) + '</b> ' +
+      '<span class="font-bold whitespace-nowrap ' + (v.pct >= 0 ? 'text-emerald-400' : 'text-red-400') + '">' + (v.pct >= 0 ? '▲ ' : '▼ ') + fmtPct(v.pct) + '</span></div></div>';
     return '<article class="flex gap-3.5 p-3.5 bg-surface border border-line rounded-[22px]" data-id="' + esc(b.id) + '">' +
       '<div class="w-[84px] h-[112px] shrink-0 rounded-2xl overflow-hidden bg-surface2 border border-line grid place-items-center text-3xl">' + photo + '</div>' +
       '<div class="flex-1 min-w-0 flex flex-col">' +
         '<div class="text-lg font-bold leading-tight break-words">' + esc(b.name) + '</div>' +
         '<div class="text-sm text-zinc-400 mt-0.5">' + esc(vint) + ' · ' + eur.format(b.price) + '</div>' +
+        '<div class="mt-1.5 flex items-center flex-wrap gap-x-2 gap-y-0.5"><span class="inline-block px-2.5 py-0.5 rounded-full border text-xs font-bold ' + S.cls + '">' + S.label + '</span>' +
+        '<span class="text-xs text-zinc-500">' + esc(st.sub) + '</span></div>' + est +
         (b.barcode ? '<div class="text-xs text-zinc-500 mt-0.5 tracking-wide tabular-nums break-all">▮▯▮ ' + esc(b.barcode) + '</div>' : '') +
         '<div class="flex flex-wrap items-center gap-1.5 mt-2">' +
           '<span class="px-2.5 py-1 rounded-full bg-surface2 border border-line text-xs font-bold mr-1">Étage <span class="text-wine">' + b.floor + '</span></span>' +
@@ -911,19 +1234,40 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       '</div></article>';
   }
 
+  function updateSmartUI(cnt){
+    $('smart').querySelectorAll('.chip').forEach(c => {
+      const k = c.getAttribute('data-smart');
+      c.classList.toggle('chip-on', k === smartFilter);
+      c.querySelector('.cnt').textContent = cnt[k];
+    });
+  }
+  $('smart').addEventListener('click', e => {
+    const c = e.target.closest('.chip'); if(!c) return;
+    smartFilter = c.getAttribute('data-smart'); lsSet('maCave.smart', smartFilter); haptic(); render();
+  });
+
   function render(){
     const term = qEl.value.trim().toLowerCase();
-    const shown = items.filter(b => !term || b.name.toLowerCase().indexOf(term) !== -1).sort(sorter());
+    const cnt = {all:0, drink:0, keep:0, decline:0}, stOf = new Map();
+    let totalV = 0;
+    items.forEach(b => {
+      const k = drinkStatus(b).key; stOf.set(b.id, k);
+      cnt.all += b.qty; cnt[k] += b.qty; totalV += b.qty * b.price;
+    });
+    const shown = items.filter(b => (!term || b.name.toLowerCase().indexOf(term) !== -1) &&
+      (smartFilter === 'all' || stOf.get(b.id) === smartFilter)).sort(sorter());
 
-    let totalB = 0, totalV = 0;
-    items.forEach(b => { totalB += b.qty; totalV += b.qty * b.price; });
-    $('totalBottles').textContent = totalB;
+    $('totalBottles').textContent = cnt.all;
     $('totalValue').textContent = eur.format(totalV);
-    updateSortUI();
+    const te = totalsEst();
+    $('totalEst').innerHTML = items.length
+      ? 'Estimée <b class="text-white">' + eur.format(te.est) + '</b> <span class="font-bold ' + (te.pct >= 0 ? 'text-emerald-400' : 'text-red-400') + '">' + (te.pct >= 0 ? '▲ ' : '▼ ') + fmtPct(te.pct) + '</span>'
+      : '';
+    updateSortUI(); updateSmartUI(cnt);
 
     if(!shown.length){
       listEl.innerHTML = '<div class="text-center text-zinc-400 py-12 px-5 leading-relaxed"><div class="text-5xl mb-2">🍾</div>' +
-        (items.length ? 'Aucune bouteille ne correspond à votre recherche.'
+        (items.length ? (smartFilter !== 'all' && !term ? 'Aucune bouteille dans cette catégorie.' : 'Aucune bouteille ne correspond à votre recherche.')
                       : 'Votre cave est vide.<br>Touchez « Ajouter » ou scannez un code-barres.') + '</div>';
       return;
     }
@@ -942,7 +1286,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     else if(act === 'del'){
       if(confirm('Supprimer « ' + b.name + ' » de la cave ?')){
         items = items.filter(x => x.id !== id);
-        markDirty(id,'del'); render();
+        dropMeta(id); markDirty(id,'del'); render();
       }
     }
   });
@@ -963,6 +1307,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     if(name === 'scan') hideScanner();
     else if(name === 'sheet') hideSheet();
     else if(name === 'info') $('infoOverlay').classList.remove('open');
+    else if(name === 'settings') $('settingsOverlay').classList.remove('open');
     else if(name === 'floors') $('floorOverlay').classList.remove('open');
     else if(name === 'account') $('accOverlay').classList.remove('open');
   }
@@ -1024,67 +1369,36 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   $('rmBtn').addEventListener('click', () => { currentPhoto = ''; showPhotoPreview(); });
 
   /* ------------------------------------------------------------------ */
-  /* Fiche produit enrichie : Open Food Facts / Open Wine Facts           */
+  /* Fiche produit enrichie : Open Wine/Food Facts + Wikidata + Wikipédia */
   /* ------------------------------------------------------------------ */
-  const GRAPES = ['Cabernet Sauvignon','Cabernet Franc','Merlot','Pinot Noir','Pinot Gris','Pinot Blanc','Pinot Meunier','Chardonnay','Sauvignon Blanc','Syrah','Shiraz','Grenache','Mourvedre','Carignan','Cinsault','Malbec','Tannat','Gamay','Chenin','Viognier','Riesling','Gewurztraminer','Muscat','Semillon','Melon de Bourgogne','Aligote','Marsanne','Roussanne','Sangiovese','Nebbiolo','Tempranillo','Zinfandel','Primitivo','Pinotage','Colombard','Ugni Blanc','Trebbiano','Glera','Barbera','Montepulciano','Garnacha','Albarino','Verdejo','Carmenere','Petit Verdot','Cot','Muscadet','Vermentino','Grüner Veltliner','Gruner Veltliner'];
-  const REGIONS = ['Bordeaux','Medoc','Haut-Medoc','Saint-Emilion','Pomerol','Margaux','Pauillac','Saint-Julien','Saint-Estephe','Pessac-Leognan','Sauternes','Graves','Entre-deux-Mers','Bourgogne','Chablis','Cote de Nuits','Cote de Beaune','Macon','Beaujolais','Champagne','Alsace','Loire','Sancerre','Vouvray','Muscadet','Anjou','Saumur','Chinon','Rhone','Cotes du Rhone','Chateauneuf-du-Pape','Hermitage','Crozes-Hermitage','Languedoc','Roussillon','Provence','Bandol','Cahors','Bergerac','Jurancon','Madiran','Jura','Savoie','Sud-Ouest','Corse','Rioja','Ribera del Duero','Priorat','Toscane','Tuscany','Chianti','Piemont','Piedmont','Barolo','Veneto','Prosecco','Mosel','Douro','Alentejo','Napa Valley','Mendoza','Barossa','Marlborough'];
-  const GRAPES_N = GRAPES.map(norm), REGIONS_N = REGIONS.map(norm);
+  const DBS = [
+    ['Open Wine Facts', 'https://world.openwinefacts.org'],
+    ['Open Food Facts', 'https://world.openfoodfacts.org'],
+    ['Open Products Facts', 'https://world.openproductsfacts.org']
+  ];
+  const FIELDS = 'code,product_name,product_name_fr,generic_name,generic_name_fr,brands,quantity,countries,origins,categories,categories_tags,labels,labels_tags,ingredients_text,ingredients_text_fr,image_front_url,image_front_small_url,nutriments';
+  const WINE_RE = /\bvins?\b|wine|vignoble|vineyard|winery|domaine|ch[aâ]teau|appellation|\bcru\b|vigneron|bodega|weingut|cuv[eé]e/i;
+  const STOP = new Set(['chateau','domaine','cuvee','grand','vieilles','vignes','rouge','blanc','reserve','cotes','wine','brut','prestige','mise','bouteille']);
 
-  function pickKnown(textN, listN, listRaw, limit){
-    const out = [];
-    listN.forEach((g,i) => {
-      const re = new RegExp('(^|[^a-z])' + g.replace(/[-\s]/g,'[-\\s]?') + '([^a-z]|$)');
-      if(re.test(textN)) out.push(listRaw[i]);
-    });
-    return out.slice(0, limit);
+  function tokens(s){ return norm(s).split(/[^a-z0-9]+/).filter(t => t.length >= 4 && !STOP.has(t)); }
+  function related(a, b){ const B = new Set(tokens(b)); return tokens(a).some(t => B.has(t)); }
+  function cleanName(n){ return String(n || '').replace(/\b(1[89]|20)\d{2}\b/g, ' ').replace(/\b(AOC|AOP|IGP|DOCG?)\b/gi, ' ').replace(/\s+/g, ' ').trim(); }
+  function cleanTags(s){ return String(s || '').split(',').map(x => x.trim().replace(/^[a-z]{2}:/i, '').replace(/-/g, ' ')).filter(Boolean); }
+  function guessDomain(name){
+    const m = String(name || '').match(/\b(ch[aâ]teau|domaine|clos|mas|maison|bodega|cantina|tenuta|weingut|cave)\s+[^,;()\d]{2,40}/i);
+    return m ? m[0].trim() : '';
   }
-  function wineType(tags, textN){
-    const t = (tags || []).join(' ') + ' ' + textN;
-    if(/champagne|sparkling|effervescent|cremant|prosecco|cava|petillant/.test(t)) return 'Effervescent';
-    if(/rose-wine|rose wine|vin rose|\brose\b/.test(t)) return 'Rosé';
-    if(/red-wine|red wine|vin rouge|\brouge\b|\brosso\b|\btinto\b/.test(t)) return 'Rouge';
-    if(/white-wine|white wine|vin blanc|\bblanc\b|\bbianco\b/.test(t)) return 'Blanc';
-    if(/dessert|liquoreux|sweet-wine|sauternes|moelleux/.test(t)) return 'Liquoreux / doux';
-    return '';
+  function spinnerHTML(msg){
+    return '<div class="flex items-center gap-3 text-zinc-400 text-[15px] py-2"><div class="spinner" style="width:22px;height:22px;border-width:3px;margin:0"></div><span>' + esc(msg) + '</span></div>';
   }
-  function extractProduct(j, label, code){
-    if(!j || !j.product) return null;
-    const p = j.product;
-    const name = String(p.product_name_fr || p.product_name || p.generic_name_fr || p.generic_name || '').trim();
-    const brand = String(p.brands || '').split(',')[0].trim();
-    if(!name && !brand) return null;
-    const cats = String(p.categories || '').split(',').map(s => s.trim()).filter(Boolean);
-    const labels = String(p.labels || '').split(',').map(s => s.trim()).filter(Boolean);
-    const ingr = String(p.ingredients_text_fr || p.ingredients_text || '').trim();
-    const textN = norm([name, brand, p.generic_name, p.categories, (p.categories_tags || []).join(' '), ingr, p.origins].join(' '));
-    const nut = p.nutriments || {};
-    let alc = nut.alcohol_100g != null ? nut.alcohol_100g : (nut.alcohol_value != null ? nut.alcohol_value : nut.alcohol);
-    alc = alc != null && !isNaN(parseFloat(alc)) ? parseFloat(alc) : null;
-    const type = wineType(p.categories_tags, textN);
-    const grapes = pickKnown(textN, GRAPES_N, GRAPES, 4).filter((g,i,a) => !(g === 'Sauvignon Blanc' && false));
-    const regions = pickKnown(textN, REGIONS_N, REGIONS, 3);
-    const sweet = /\bbrut\b/.test(textN) ? 'Brut' : (/demi-?sec/.test(textN) ? 'Demi-sec' : (/\bsec\b|\bdry\b/.test(textN) ? 'Sec' : (/moelleux|liquoreux|\bsweet\b|\bdoux\b/.test(textN) ? 'Doux / moelleux' : '')));
-    const organic = /organic|\bbio\b|biologique|\bab\b/.test(norm(labels.join(' ') + ' ' + (p.labels_tags || []).join(' ')));
-    const profile = [];
-    if(type) profile.push(type);
-    if(sweet) profile.push(sweet);
-    if(alc != null) profile.push(alc < 11.5 ? 'léger en alcool' : (alc <= 13.5 ? 'alcool moyen' : 'puissant'));
-    if(organic) profile.push('bio');
-    return {
-      code:code, source:label, name:name || brand, brand:brand,
-      quantity:p.quantity || '', countries:p.countries || '', origins:p.origins || '',
-      regions:regions, grapes:grapes, type:type, alcohol:alc, categories:cats.slice(0,5), labels:labels.slice(0,5),
-      ingredients:ingr.length > 220 ? ingr.slice(0,217) + '…' : ingr,
-      profile:profile.join(' · '),
-      image:p.image_front_url || p.image_front_small_url || '',
-      url:(label === 'Open Wine Facts' ? 'https://world.openwinefacts.org' : 'https://world.openfoodfacts.org') + '/product/' + encodeURIComponent(code)
-    };
-  }
-  async function getJSON(url){
+
+  /* Requête JSON bornée (6 s maximum) : jamais de blocage */
+  async function getJSON(url, ms){
     const ctrl = window.AbortController ? new AbortController() : null;
-    const t = setTimeout(() => { if(ctrl) ctrl.abort(); }, 7000);
+    const t = setTimeout(() => { if(ctrl) ctrl.abort(); }, Math.min(TIMEOUT_MS, ms || TIMEOUT_MS));
     try{
       const r = await fetch(url, ctrl ? {signal:ctrl.signal} : undefined);
+      if(!r.ok) return {status:r.status};
       return {json: await r.json()};
     }catch(e){
       return {net:true};
@@ -1092,137 +1406,249 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       clearTimeout(t);
     }
   }
-  const FIELDS = 'code,product_name,product_name_fr,generic_name,generic_name_fr,brands,quantity,countries,origins,categories,categories_tags,labels,labels_tags,ingredients_text,ingredients_text_fr,image_front_url,image_front_small_url,nutriments';
-  const infoCache = new Map();
-  async function fetchProductInfo(code){
-    if(infoCache.has(code)) return infoCache.get(code);
-    const bases = [['Open Food Facts','https://world.openfoodfacts.org'], ['Open Wine Facts','https://world.openwinefacts.org']];
-    let netFail = false, found = null;
-    for(const [label, base] of bases){
-      const url = base + '/api/v2/product/' + encodeURIComponent(code) + '.json?fields=' + FIELDS;
-      const r = await getJSON(url);
-      if(r.net){ netFail = true; continue; }
-      const p = extractProduct(r.json, label, code);
-      if(p){ found = p; break; }
-    }
-    if(!found && netFail){
-      // Fallback via proxy public (uniquement si l'accès direct a échoué)
-      const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code) + '.json?fields=' + FIELDS;
-      const r = await getJSON('https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
-      if(!r.net) found = extractProduct(r.json, 'Open Food Facts (proxy)', code);
-    }
-    if(found) infoCache.set(code, found);
-    return found;
+
+  /* --- Source 1-3 : bases communautaires par code-barres --- */
+  function extractProduct(p, label, base, code){
+    const name = String(p.product_name_fr || p.product_name || p.generic_name_fr || p.generic_name || '').trim();
+    const brand = String(p.brands || '').split(',')[0].trim();
+    if(!name && !brand) return null;
+    const nut = p.nutriments || {};
+    let alc = nut.alcohol_100g != null ? nut.alcohol_100g : (nut.alcohol_value != null ? nut.alcohol_value : nut.alcohol);
+    alc = alc != null && !isNaN(parseFloat(alc)) ? parseFloat(alc) : null;
+    return {
+      kind:'db', label:label, url:base + '/product/' + encodeURIComponent(code),
+      name:name || brand, brand:brand, quantity:p.quantity || '', countries:cleanTags(p.countries), origins:cleanTags(p.origins),
+      categories:cleanTags(p.categories), labels:cleanTags(p.labels), ingredients:String(p.ingredients_text_fr || p.ingredients_text || '').trim(),
+      alcohol:alc, image:p.image_front_url || p.image_front_small_url || ''
+    };
   }
-  async function searchProductByName(name){
-    const enc = encodeURIComponent(name);
-    const tries = [
-      ['Open Food Facts','https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + enc + '&search_simple=1&action=process&json=1&page_size=1&tagtype_0=categories&tag_contains_0=contains&tag_0=wines&fields=' + FIELDS],
-      ['Open Wine Facts','https://world.openwinefacts.org/cgi/search.pl?search_terms=' + enc + '&search_simple=1&action=process&json=1&page_size=1&fields=' + FIELDS]
-    ];
-    for(const [label, url] of tries){
-      const r = await getJSON(url);
-      if(r.net || !r.json || !r.json.products || !r.json.products.length) continue;
-      const p0 = r.json.products[0];
-      const p = extractProduct({product:p0}, label, p0.code || '');
-      if(p){ p.approx = true; return p; }
-    }
-    return null;
+  async function fetchDB(label, base, code, left){
+    const url = base + '/api/v2/product/' + encodeURIComponent(code) + '.json?fields=' + FIELDS;
+    let r = await getJSON(url, Math.min(3500, left()));
+    if(r.net && left() > 1200) r = await getJSON('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), left());   // repli via proxy public
+    if(!r.json || r.json.status === 0 || !r.json.product) return null;
+    return extractProduct(r.json.product, label, base, code);
   }
 
+  /* --- Source 4 : Wikidata (domaine, pays, région, image) --- */
+  async function wikidataLookup(name, left){
+    const q = cleanName(name); if(q.length < 3) return null;
+    const s = await getJSON('https://www.wikidata.org/w/api.php?action=wbsearchentities&search=' + encodeURIComponent(q) + '&language=fr&uselang=fr&type=item&limit=7&format=json&origin=*', Math.min(3000, left()));
+    const hit = ((s.json && s.json.search) || []).find(h => WINE_RE.test((h.description || '') + ' ' + (h.label || '')) && related(q, h.label || ''));
+    if(!hit) return null;
+    const rec = {kind:'wd', label:'Wikidata', url:'https://www.wikidata.org/wiki/' + hit.id, name:hit.label || '', description:hit.description || '', image:'', country:'', region:''};
+    const e = await getJSON('https://www.wikidata.org/w/api.php?action=wbgetentities&ids=' + hit.id + '&props=claims&format=json&origin=*', Math.min(3000, left()));
+    const ent = e.json && e.json.entities && e.json.entities[hit.id];
+    if(!ent) return rec;
+    const cl = ent.claims || {};
+    const val = pid => { const c = cl[pid] && cl[pid][0] && cl[pid][0].mainsnak && cl[pid][0].mainsnak.datavalue; return c ? c.value : null; };
+    const img = val('P18'), co = val('P17'), loc = val('P131');
+    if(typeof img === 'string') rec.image = 'https://commons.wikimedia.org/wiki/Special:FilePath/' + encodeURIComponent(img) + '?width=500';
+    const ids = [co && co.id, loc && loc.id].filter(Boolean);
+    if(ids.length && left() > 800){
+      const l = await getJSON('https://www.wikidata.org/w/api.php?action=wbgetentities&ids=' + ids.join('|') + '&props=labels&languages=fr|en&format=json&origin=*', Math.min(2500, left()));
+      const lab = id => { const x = l.json && l.json.entities && l.json.entities[id]; return x && x.labels ? ((x.labels.fr || x.labels.en || {}).value || '') : ''; };
+      if(co) rec.country = lab(co.id);
+      if(loc) rec.region = lab(loc.id);
+    }
+    return rec;
+  }
+
+  /* --- Source 5 : Wikipédia FR (texte : appellation, cépages, région) --- */
+  async function wikipediaLookup(name, left){
+    const q = cleanName(name); if(q.length < 3) return null;
+    const r = await getJSON('https://fr.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrsearch=' + encodeURIComponent(q + ' vin') +
+      '&gsrlimit=1&prop=extracts|pageimages|info&exintro=1&explaintext=1&exchars=600&piprop=thumbnail&pithumbsize=500&inprop=url', Math.min(4000, left()));
+    const pages = r.json && r.json.query && r.json.query.pages; if(!pages) return null;
+    const pg = pages[Object.keys(pages)[0]];
+    if(!pg || !related(q, pg.title || '') || !/vin|vignoble|appellation|domaine|ch[aâ]teau|c[eé]page|vigne|cuv[eé]e/i.test(pg.extract || '')) return null;
+    return {kind:'wp', label:'Wikipédia', url:pg.fullurl || '', name:pg.title || '', description:pg.extract || '', image:pg.thumbnail ? pg.thumbnail.source : ''};
+  }
+
+  /* --- Fusion des sources --- */
+  function mergeInfo(parts, code, hint){
+    if(!parts.length) return null;
+    const dbs = parts.filter(p => p.kind === 'db'), wd = parts.find(p => p.kind === 'wd'), wp = parts.find(p => p.kind === 'wp');
+    const name = (dbs[0] && dbs[0].name) || (wd && wd.name) || (wp && wp.name) || hint || '';
+    const dbText = dbs.map(p => [p.name, p.brand, p.categories.join(' '), p.labels.join(' ')].join(' ')).join(' ');
+    const text = norm([dbText, dbs.map(p => p.ingredients + ' ' + p.origins.join(' ')).join(' '), wd ? wd.name + ' ' + wd.description + ' ' + wd.region : '', wp ? wp.name + ' ' + wp.description : '', hint].join(' '));
+    const ap = APPEL.find(a => a.re.test(text)) || null;
+    let appellation = ap ? ap.name : '';
+    if(!appellation){
+      const m = dbs.map(p => p.labels.concat(p.categories).join(' ; ')).join(' ; ').match(/\b(?:AOC|AOP|DOCG?|IGP)\s+([A-Za-zÀ-ÿ' -]{3,40})/i);
+      if(m) appellation = m[0].trim();
+    }
+    let grapes = mineGrapes(text), typical = false;
+    if(!grapes.length && ap){ grapes = ap.grapes.slice(); typical = true; }
+    const origin = dbs.map(p => p.origins[0]).find(Boolean) || '';
+    const single = dbs.map(p => p.countries.length === 1 ? p.countries[0] : '').find(Boolean) || '';
+    const tcode = explicitType(norm(dbText));
+    const labels = []; dbs.forEach(p => p.labels.forEach(l => { if(labels.indexOf(l) === -1 && labels.length < 6) labels.push(l); }));
+    return {
+      code:code || '', name:name, domain:(dbs[0] && dbs[0].brand) || guessDomain(name),
+      appellation:appellation, region:(ap && ap.region) || (wd && wd.region) || '',
+      country:(ap && ap.country) || (wd && wd.country) || origin || single,
+      grapes:grapes, grapesTypical:typical, type: tcode ? TYPE_DEF[tcode].label : '',
+      alcohol:(dbs.find(p => p.alcohol != null) || {}).alcohol != null ? dbs.find(p => p.alcohol != null).alcohol : null,
+      quantity:(dbs.find(p => p.quantity) || {}).quantity || '', labels:labels, categoriesText:dbs.map(p => p.categories.join(' ')).join(' '),
+      description:(wp && wp.description) || (wd && wd.description) || '',
+      image:(dbs.find(p => p.image) || {}).image || (wd && wd.image) || (wp && wp.image) || '',
+      sources:parts.map(p => ({label:p.label, url:p.url}))
+    };
+  }
+
+  /* --- Recherche croisée : toutes les sources en parallèle, 6 s au total --- */
+  const infoCache = new Map();
+  async function lookupAll(code, name, onStep){
+    const t0 = Date.now(), left = () => Math.max(300, TIMEOUT_MS - (Date.now() - t0));
+    const parts = [], note = rec => { if(rec){ parts.push(rec); if(onStep) onStep(rec.label); } };
+    const none = () => null;
+    let nm = String(name || '').trim();
+    const jobs = [];
+    if(code) DBS.forEach(d => jobs.push(fetchDB(d[0], d[1], code, left).then(note, none)));
+    if(nm){ jobs.push(wikidataLookup(nm, left).then(note, none)); jobs.push(wikipediaLookup(nm, left).then(note, none)); }
+    await Promise.all(jobs);
+    if(!nm){
+      const db = parts.find(p => p.kind === 'db');
+      if(db && db.name && left() > 1500){
+        nm = db.name;
+        await Promise.all([wikidataLookup(nm, left).then(note, none), wikipediaLookup(nm, left).then(note, none)]);
+      }
+    }
+    return mergeInfo(parts, code, name || nm);
+  }
+  async function lookupSafe(code, name, onStep){
+    const key = (code || '') + '|' + norm(name || '');
+    if(infoCache.has(key)) return infoCache.get(key);
+    let info = null;
+    try{ info = await withTimeout(lookupAll(code, name, onStep), TIMEOUT_MS + 3000); }
+    catch(e){ info = null; }
+    finally{ /* aucun état à libérer : toutes les requêtes sont déjà bornées */ }
+    if(info) infoCache.set(key, info);
+    return info;
+  }
+
+  /* --- Rendu de la fiche --- */
   function row(l, v){
     return v ? '<div class="flex gap-3 py-1.5 border-b border-line/60 last:border-0"><div class="w-24 shrink-0 text-xs uppercase tracking-wide text-zinc-400 pt-0.5">' + l +
       '</div><div class="flex-1 text-[15px] break-words">' + esc(v) + '</div></div>' : '';
   }
-  function infoHTML(p){
-    const img = p.image ? '<img src="' + esc(p.image) + '" alt="Étiquette" referrerpolicy="no-referrer" class="w-28 h-40 object-contain rounded-xl bg-black/40 border border-line shrink-0">' : '';
-    const head = '<div class="flex gap-3.5">' + img + '<div class="min-w-0"><div class="text-lg font-bold leading-tight break-words">' + esc(p.name) + '</div>' +
-      (p.brand && p.brand !== p.name ? '<div class="text-sm text-zinc-400 mt-0.5">' + esc(p.brand) + '</div>' : '') +
-      (p.approx ? '<div class="text-xs text-amber-400 mt-1.5">Résultat approximatif d’après le nom : vérifiez qu’il correspond.</div>' : '') +
+  const BASIS = {'appellation':'l’appellation', 'cépage':'le cépage', 'type':'le type de vin (peu précis)', 'champagne millésimé':'le champagne millésimé'};
+  function infoHTML(info, b){
+    const bb = b || {id:'_', name:(info && info.name) || '', vintage:null, price:0, qty:0};
+    const p = wineProfile(bb, info);
+    const img = (info && info.image) || (b && b.photo) || '';
+    const name = (info && info.name) || bb.name;
+    const st = b && b.id !== '_' ? drinkStatus(bb) : null;
+    const head = '<div class="flex gap-3.5">' +
+      (img ? '<img src="' + esc(img) + '" alt="Étiquette" referrerpolicy="no-referrer" class="w-28 h-40 object-contain rounded-xl bg-black/40 border border-line shrink-0">' : '') +
+      '<div class="min-w-0"><div class="text-lg font-bold leading-tight break-words">' + esc(name) + '</div>' +
+      (info && info.domain && info.domain !== name ? '<div class="text-sm text-zinc-400 mt-0.5">' + esc(info.domain) + '</div>' : '') +
+      (st ? '<div class="mt-2"><span class="inline-block px-2.5 py-0.5 rounded-full border text-xs font-bold ' + STATUS[st.key].cls + '">' + STATUS[st.key].label + '</span> <span class="text-xs text-zinc-500">' + esc(st.sub) + '</span></div>' : '') +
       '</div></div>';
+    const grapes = info && info.grapes && info.grapes.length ? info.grapes : p.grapesTypical;
+    const typical = !(info && info.grapes && info.grapes.length) && p.grapesTypical.length;
+    const garde = bb.vintage
+      ? 'À boire dès ' + (bb.vintage + p.from) + ' · apogée jusqu’en ' + (bb.vintage + p.peak) + ' · limite vers ' + (bb.vintage + p.to)
+      : 'Dès ' + p.from + ' an(s) · apogée jusqu’à ' + p.peak + ' ans · limite ' + p.to + ' ans après le millésime';
     const rows =
-      row('Pays', p.countries) + row('Origine', p.origins) + row('Région', p.regions.join(', ')) +
-      row('Cépage(s)', p.grapes.join(', ')) + row('Type', p.type) +
-      row('Alcool', p.alcohol != null ? p.alcohol + ' % vol.' : '') + row('Contenance', p.quantity) +
-      row('Profil', p.profile) + row('Catégories', p.categories.join(' › ')) + row('Labels', p.labels.join(', ')) +
-      row('Ingrédients', p.ingredients);
-    const note = (!p.regions.length && !p.grapes.length)
-      ? '<p class="text-xs text-zinc-500 mt-2">Région et cépage ne sont pas renseignés pour ce produit dans la base communautaire.</p>' : '';
-    const src = '<p class="text-xs text-zinc-500 mt-2">Source : <a class="underline" target="_blank" rel="noopener" href="' + esc(p.url) + '">' + esc(p.source) +
-      '</a>. Profil et type sont déduits des catégories (indicatif) ; aucune note d’amertume n’est fournie pour les vins.</p>';
-    return head + '<div class="mt-3">' + rows + '</div>' + note + src;
+      row('Domaine', info && info.domain) + row('Appellation', (info && info.appellation) || p.appel) +
+      row('Région', (info && info.region) || p.region) + row('Pays', (info && info.country) || p.country) +
+      row('Cépages', grapes.join(', ') + (typical ? ' (typiques de l’appellation)' : '')) +
+      row('Type', (info && info.type) || p.typeLabel) +
+      row('Alcool', info && info.alcohol != null ? info.alcohol + ' % vol.' : '') + row('Contenance', info && info.quantity) +
+      row('Potentiel de garde', garde) + row('Servir à', p.tmin + ' – ' + p.tmax + ' °C') +
+      row('Labels', info && info.labels ? info.labels.join(', ') : '');
+    let chart = '';
+    if(b && b.id !== '_'){
+      const v = valuation(b);
+      chart = v.na
+        ? '<p class="text-xs text-zinc-500 mt-3">Renseignez le millésime et le prix pour estimer la valeur.</p>'
+        : '<div class="mt-3 rounded-2xl border border-line bg-surface2/60 p-3"><div class="text-xs uppercase tracking-wide text-zinc-400 mb-1">Évolution estimée de la valeur</div>' + chartSVG(b, true) +
+          '<div class="text-sm mt-1.5">Valeur estimée <b>' + eur.format(v.unit) + '</b> par bouteille <span class="font-bold ' + (v.pct >= 0 ? 'text-emerald-400' : 'text-red-400') + '">' +
+          (v.pct >= 0 ? '▲ ' : '▼ ') + fmtPct(v.pct) + '</span> <span class="text-zinc-500 text-xs">(prix saisi : ' + eur.format(b.price) + ' · taux ' + String(settings.rate).replace('.', ',') + ' %/an)</span></div></div>';
+    }
+    const desc = info && info.description ? '<p class="text-sm text-zinc-300 mt-3 leading-snug">' + esc(String(info.description).slice(0, 320)) + (info.description.length > 320 ? '…' : '') + '</p>' : '';
+    const src = info && info.sources && info.sources.length
+      ? '<p class="text-xs text-zinc-500 mt-3">Sources : ' + info.sources.map(s => s.url ? '<a class="underline" target="_blank" rel="noopener" href="' + esc(s.url) + '">' + esc(s.label) + '</a>' : esc(s.label)).join(', ') + '.</p>' : '';
+    return head + '<div class="mt-3">' + rows + '</div>' + desc + chart + src +
+      '<p class="text-xs text-zinc-500 mt-2">Garde, température et valeur sont des estimations indicatives d’après ' + (BASIS[p.basis] || 'le type de vin') + ' ; les autres champs viennent des bases publiques (parfois incomplètes).</p>';
   }
-  function spinnerHTML(msg){
-    return '<div class="flex items-center gap-3 text-zinc-400 text-[15px] py-2"><div class="spinner" style="width:22px;height:22px;border-width:3px;margin:0"></div><span>' + esc(msg) + '</span></div>';
+  function noInfoHTML(){
+    return '<p class="text-[15px] text-zinc-300">Aucune information trouvée dans Open Wine Facts, Open Food Facts, Wikidata ni Wikipédia (produit absent ou réseau indisponible). Saisissez le nom à la main.</p>';
   }
 
-  /* Dans la fiche d'édition */
-  async function runLookup(code, apply){
-    const tok = ++lookupTok;
-    $('prodBox').hidden = false; $('applyInfo').hidden = true;
-    $('prodBody').innerHTML = spinnerHTML('Recherche du produit (Open Food Facts / Open Wine Facts)…');
-    let p = null;
-    try{ p = await fetchProductInfo(code); }
-    catch(e){ p = null; }
-    finally{ /* le spinner est remplacé ci-dessous dans tous les cas */ }
-    if(tok !== lookupTok || !overlay.classList.contains('open') || fCode.value.replace(/\s+/g,'') !== code) return;
-    if(!p){
-      $('prodBody').innerHTML = '<p class="text-[15px] text-zinc-300">Produit introuvable dans Open Food Facts / Open Wine Facts (ou réseau indisponible). Saisissez le nom à la main.</p>';
-      return;
-    }
-    lastInfo = p;
-    $('prodBody').innerHTML = infoHTML(p);
-    $('applyInfo').hidden = false;
-    if(apply) applyInfo(p, false);
+  /* --- Dans la fiche d'édition --- */
+  function formBottle(info){
+    return {id:'_', name:fName.value.trim() || (info && info.name) || '', vintage:parseInt(fVintage.value,10) || null,
+      price:parseFloat(String(fPrice.value).replace(',', '.')) || 0, qty:1, created_at:new Date().toISOString()};
   }
-  async function applyInfo(p, force){
-    if(force || !fName.value.trim()) fName.value = p.name;
+  async function runLookup(code, apply){
+    const tok = ++lookupTok, body = $('prodBody');
+    $('prodBox').hidden = false; $('applyInfo').hidden = true;
+    body.innerHTML = spinnerHTML('Recherche croisée : Open Wine Facts, Open Food Facts, Wikidata, Wikipédia…');
+    const guard = setTimeout(() => { if(tok === lookupTok && body.querySelector('.spinner')) body.innerHTML = noInfoHTML(); }, TIMEOUT_MS + 3500);
+    let info = null;
+    try{ info = await lookupSafe(code, fName.value.trim()); }
+    catch(e){ info = null; }
+    finally{ clearTimeout(guard); }
+    if(tok !== lookupTok || !overlay.classList.contains('open')) return;
+    if(!info){ body.innerHTML = noInfoHTML(); return; }
+    lastInfo = info;
+    body.innerHTML = infoHTML(info, null);
+    $('applyInfo').hidden = false;
+    if(apply) applyInfo(info, false);
+  }
+  async function applyInfo(info, force){
+    if(force || !fName.value.trim()) fName.value = info.name;
     if(force || !fVintage.value.trim()){
-      const m = p.name.match(/\b(19[5-9]\d|20[0-3]\d)\b/);
+      const m = String(info.name).match(/\b(19[5-9]\d|20[0-3]\d)\b/);
       if(m) fVintage.value = m[1];
     }
-    if(p.image && (force || !currentPhoto)){
+    if(info.image && (force || !currentPhoto)){
       const tok = lookupTok;
-      const d = await remoteImage(p.image);
+      let d = await remoteImage(info.image);
       if(tok !== lookupTok || !overlay.classList.contains('open')) return;
+      if(!d && /^https:/.test(info.image)){ d = info.image; if(force) toast('Visuel importé par lien (copie locale impossible).'); }
       if(d){ currentPhoto = d; showPhotoPreview(); }
-      else if(force) toast('Visuel non importable (protection du site) : il reste affiché dans la fiche.');
     }
+    if(lastInfo) $('prodBody').innerHTML = infoHTML(lastInfo, formBottle(lastInfo));
   }
   $('applyInfo').addEventListener('click', () => { if(lastInfo) applyInfo(lastInfo, true); });
   $('lookupBtn').addEventListener('click', () => {
-    const code = fCode.value.replace(/\s+/g,'');
-    if(code.length < 6){ errEl.textContent = 'Saisissez ou scannez d’abord un code-barres.'; return; }
-    errEl.textContent = ''; runLookup(code, false);
+    const code = fCode.value.replace(/\s+/g, '');
+    if(code.length < 6 && !fName.value.trim()){ errEl.textContent = 'Saisissez ou scannez un code-barres, ou indiquez un nom de vin.'; return; }
+    errEl.textContent = ''; runLookup(code.length >= 6 ? code : '', false);
   });
   fCode.addEventListener('change', () => {
-    const code = fCode.value.replace(/\s+/g,'');
-    if(code.length >= 8 && !editingId && !findByCode(code,null)) runLookup(code, true);
+    const code = fCode.value.replace(/\s+/g, '');
+    if(code.length >= 8 && !editingId && !findByCode(code, null)) runLookup(code, true);
   });
 
-  /* Depuis une carte */
+  /* --- Depuis une carte (bouton ℹ︎) --- */
   let infoBottle = null, infoTok = 0;
   async function openInfo(b){
-    infoBottle = b;
-    $('infoTitle').textContent = b.name;
+    infoBottle = b; $('infoTitle').textContent = b.name;
     $('infoOverlay').classList.add('open'); pushLayer('info');
+    const mt = metaOf(b.id);
+    if(mt.info){ $('infoBody').innerHTML = infoHTML(mt.info, b); return; }
     await loadInfo();
   }
   async function loadInfo(){
     const b = infoBottle; if(!b) return;
-    const tok = ++infoTok;
-    $('infoBody').innerHTML = spinnerHTML('Recherche des informations…');
-    let p = null;
-    try{
-      infoCache.delete(b.barcode);
-      p = b.barcode ? await fetchProductInfo(b.barcode) : null;
-      if(!p) p = await searchProductByName(b.name);
-    }catch(e){ p = null; }
-    finally{ /* rendu ci-dessous */ }
+    const tok = ++infoTok, body = $('infoBody');
+    body.innerHTML = spinnerHTML('Recherche croisée des informations…');
+    const guard = setTimeout(() => {
+      if(tok === infoTok && body.querySelector('.spinner')) body.innerHTML = infoHTML(metaOf(b.id).info || null, b);
+    }, TIMEOUT_MS + 3500);
+    let info = null;
+    try{ infoCache.delete((b.barcode || '') + '|' + norm(b.name)); info = await lookupSafe(b.barcode, b.name); }
+    catch(e){ info = null; }
+    finally{ clearTimeout(guard); }
     if(tok !== infoTok || !$('infoOverlay').classList.contains('open')) return;
-    $('infoBody').innerHTML = p ? infoHTML(p)
-      : '<p class="text-[15px] text-zinc-300">Aucune information trouvée pour cette bouteille (produit absent de la base ou réseau indisponible).' +
-        (b.barcode ? '' : ' Ajoutez son code-barres pour une recherche plus fiable.') + '</p>';
+    if(info){ setMeta(b.id, info); render(); }
+    body.innerHTML = infoHTML(info || metaOf(b.id).info || null, b) +
+      (info ? '' : '<p class="text-xs text-amber-400 mt-3">Aucune base n’a répondu pour ce produit (absent ou réseau indisponible) : estimations d’après le nom.</p>');
   }
   function closeInfo(){ $('infoOverlay').classList.remove('open'); popLayer('info'); }
   $('infoClose').addEventListener('click', closeInfo);
@@ -1289,6 +1715,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       items.push({id:id, name:name, vintage:vintage, price:price, qty:qty, floor:floor, photo:currentPhoto, barcode:code, created_at:new Date().toISOString()});
     }
     markDirty(id,'full');
+    if(lastInfo && ((lastInfo.code && lastInfo.code === code) || norm(lastInfo.name) === norm(name))) setMeta(id, lastInfo);
     render(); closeSheet();
   });
 
@@ -1307,6 +1734,24 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   $('accOverlay').addEventListener('click', e => { if(e.target === $('accOverlay')) closeAccount(); });
   $('syncNow').addEventListener('click', async () => { await sync(); toast($('syncPill').dataset.state === 'ok' ? 'Synchronisation terminée.' : 'Synchronisation incomplète : voir l’état en haut.'); });
   $('floorsBtn').addEventListener('click', () => { closeAccount(); setTimeout(openFloors, 60); });
+
+  /* Réglages de valorisation */
+  function openSettings(){
+    $('setRate').value = settings.rate; $('setBasis').value = settings.basis;
+    $('settingsOverlay').classList.add('open'); pushLayer('settings');
+  }
+  function closeSettings(){ $('settingsOverlay').classList.remove('open'); popLayer('settings'); }
+  $('valBtn').addEventListener('click', () => { closeAccount(); setTimeout(openSettings, 60); });
+  $('setCancel').addEventListener('click', closeSettings);
+  $('settingsOverlay').addEventListener('click', e => { if(e.target === $('settingsOverlay')) closeSettings(); });
+  $('rateMinus').addEventListener('click', () => { const v = parseFloat($('setRate').value); $('setRate').value = Math.max(0, (isNaN(v) ? settings.rate : v) - 0.5); haptic(); });
+  $('ratePlus').addEventListener('click', () => { const v = parseFloat($('setRate').value); $('setRate').value = Math.min(25, (isNaN(v) ? settings.rate : v) + 0.5); haptic(); });
+  $('setSave').addEventListener('click', () => {
+    const r = parseFloat(String($('setRate').value).replace(',', '.'));
+    settings.rate = isNaN(r) ? settings.rate : Math.max(0, Math.min(25, r));
+    settings.basis = $('setBasis').value === 'added' ? 'added' : 'vintage';
+    saveSettings(); render(); closeSettings(); toast('Valorisation mise à jour.');
+  });
   $('logoutBtn').addEventListener('click', async () => {
     if(Object.keys(dirty).length && !confirm('Des modifications ne sont pas encore synchronisées et seront perdues. Se déconnecter quand même ?')) return;
     closeAccount();
@@ -1327,38 +1772,63 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   }
 
   /* ------------------------------------------------------------------ */
-  /* Scanner : BarcodeDetector natif (priorité) + ZXing, torche, zoom      */
+  /* Scanner haute précision : BarcodeDetector natif + ZXing multi-zones   */
+  /* Résolution maximale, mise au point continue, torche, zoom auto/manuel */
   /* ------------------------------------------------------------------ */
-  const scan = {open:false, mode:'stock', handled:false, token:0, stream:null, track:null, timer:0, engine:'', last:'', lastAt:0, torch:false};
+  const scan = {open:false, mode:'stock', handled:false, token:0, stream:null, track:null, timer:0, engine:'', last:'', lastAt:0,
+                torch:false, zmin:1, zmax:1, auto:true, zi:0, zAt:0};
   const video = $('video');
-  const FORMATS_NATIVE = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','qr_code','data_matrix'];
+  const FORMATS_NATIVE = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','qr_code','data_matrix','pdf417','aztec'];
 
   function setStatus(msg, bad){ const s = $('scanStatus'); s.textContent = msg; s.className = 'text-center text-[15px] leading-snug py-3 min-h-[56px] ' + (bad ? 'text-red-400' : 'text-zinc-200'); }
+
+  /* Somme de contrôle GTIN (EAN-8, UPC-A, EAN-13, GTIN-14) */
   function validEAN(code){
-    if(!/^\d+$/.test(code)) return true;                       // QR / Code 128 alphanumérique : pas de somme de contrôle EAN
-    if([8,12,13].indexOf(code.length) === -1) return code.length >= 6;
+    if(!/^\d+$/.test(code)) return code.length >= 3;
+    if([8,12,13,14].indexOf(code.length) === -1) return false;
     const d = code.split('').map(Number), chk = d.pop();
     let sum = 0; d.reverse().forEach((x,i) => { sum += x * (i % 2 === 0 ? 3 : 1); });
     return (10 - sum % 10) % 10 === chk;
   }
-  function stopScanner(){
+  function normGtin(g){ return (g.length === 14 && g.charAt(0) === '0') ? g.slice(1) : g; }
+  /* Extrait le GTIN d'un code-barres, d'un QR GS1 (Digital Link, (01)…) ou garde le texte brut */
+  function parseScan(raw){
+    let s = String(raw || '').replace(/[\u001c\u001d\u001e]/g, '').trim();
+    s = s.replace(/^\][A-Za-z][0-9A-Za-z]/, '');                       // identifiant de symbologie (]d2, ]C1, ]Q3…)
+    if(!s) return null;
+    let m = s.match(/^\(01\)\s*(\d{14})/) || (s.length > 16 ? s.match(/^01(\d{14})(?:\d{2}|$)/) : null) ||
+            s.match(/\/01\/(\d{8,14})(?:[\/?#]|$)/) || s.match(/[?&](?:gtin|ean|barcode)=(\d{8,14})/i);
+    if(m){
+      const g = normGtin(m[1]);
+      return validEAN(g) ? {code:g, gtin:true} : null;
+    }
+    if(/^\d+$/.test(s)){
+      const g = normGtin(s);
+      return validEAN(g) ? {code:g, gtin:true} : null;
+    }
+    return {code:s.slice(0, 200), gtin:false};                         // QR libre : conservé tel quel
+  }
+
+  function stopStream(){
     clearTimeout(scan.timer); scan.timer = 0;
     try{ if(scan.track && scan.torch) scan.track.applyConstraints({advanced:[{torch:false}]}).catch(() => {}); }catch(e){}
     try{ if(scan.stream) scan.stream.getTracks().forEach(t => t.stop()); }catch(e){}
     try{ video.srcObject = null; }catch(e){}
     scan.stream = null; scan.track = null; scan.torch = false; scan.engine = '';
-    $('torchBtn').hidden = true; $('zoomWrap').hidden = true;
+    $('torchBtn').hidden = true; $('zoomWrap').hidden = true; $('resInfo').textContent = '';
   }
   function hideScanner(){
     scan.open = false; scan.token++;
     $('scanner').classList.remove('flex'); $('scanner').classList.add('hidden');
-    stopScanner();
+    stopStream();
   }
   function closeScanner(noBack){ hideScanner(); popLayer('scan', noBack); }
 
+  /* Caméra : résolution maximale demandée (4K), puis repli progressif */
   async function getCameraStream(){
     const tries = [
-      {video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30}}, audio:false},
+      {video:{facingMode:{ideal:'environment'}, width:{ideal:4096}, height:{ideal:2160}, frameRate:{ideal:30}}, audio:false},
+      {video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}, audio:false},
       {video:{facingMode:'environment'}, audio:false},
       {video:true, audio:false}
     ];
@@ -1374,24 +1844,43 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   }
   async function tuneTrack(){
     const track = scan.track; if(!track) return;
-    let caps = {};
-    try{ caps = track.getCapabilities ? track.getCapabilities() : {}; }catch(e){}
-    // mise au point / exposition continues
+    let caps = {}, st = {};
+    try{ caps = track.getCapabilities ? track.getCapabilities() : {}; st = track.getSettings ? track.getSettings() : {}; }catch(e){}
+    try{                                                              // monte à la résolution maximale supportée (plafonnée à 4096 px)
+      if(caps.width && caps.height && st.width && st.width < Math.min(caps.width.max, 4096)){
+        await track.applyConstraints({width:{ideal:Math.min(caps.width.max, 4096)}, height:{ideal:Math.min(caps.height.max, 3072)}});
+        st = track.getSettings ? track.getSettings() : st;
+      }
+    }catch(e){}
+    $('resInfo').textContent = st.width && st.height ? st.width + '×' + st.height : '';
     const adv = [];
-    if(caps.focusMode && caps.focusMode.indexOf('continuous') !== -1) adv.push({focusMode:'continuous'});
-    if(caps.exposureMode && caps.exposureMode.indexOf('continuous') !== -1) adv.push({exposureMode:'continuous'});
-    if(caps.whiteBalanceMode && caps.whiteBalanceMode.indexOf('continuous') !== -1) adv.push({whiteBalanceMode:'continuous'});
+    ['focusMode','exposureMode','whiteBalanceMode'].forEach(k => { if(caps[k] && caps[k].indexOf('continuous') !== -1) adv.push({[k]:'continuous'}); });
     for(const a of adv){ try{ await track.applyConstraints({advanced:[a]}); }catch(e){} }
-    // torche
     $('torchBtn').hidden = !caps.torch;
     $('torchBtn').style.background = 'rgba(0,0,0,.6)';
-    // zoom
     if(caps.zoom && caps.zoom.max > caps.zoom.min){
+      scan.zmin = caps.zoom.min; scan.zmax = Math.min(caps.zoom.max, 8); scan.zi = 0; scan.zAt = Date.now();
       const z = $('zoomRange');
-      z.min = caps.zoom.min; z.max = Math.min(caps.zoom.max, 8); z.step = caps.zoom.step || 0.1;
-      z.value = caps.zoom.min; $('zoomWrap').hidden = false;
+      z.min = scan.zmin; z.max = scan.zmax; z.step = caps.zoom.step || 0.1; z.value = scan.zmin;
+      $('zoomWrap').hidden = false; updateAutoBtn();
     }
   }
+  function updateAutoBtn(){ $('autoZoomBtn').textContent = 'Zoom auto : ' + (scan.auto ? 'OUI' : 'NON'); $('autoZoomBtn').style.color = scan.auto ? '#3ddc84' : '#9a9aa8'; }
+  /* Zoom dynamique : sans lecture, on avance d'un palier toutes les 2,4 s et on relance la mise au point */
+  function autoZoom(){
+    if(!scan.auto || !scan.track || $('zoomWrap').hidden) return;
+    const now = Date.now(); if(now - scan.zAt < 2400) return;
+    scan.zAt = now;
+    const steps = [1, 1.6, 2.4, 3.4].map(k => Math.min(scan.zmax, scan.zmin * k)).filter((v,i,a) => a.indexOf(v) === i);
+    scan.zi = (scan.zi + 1) % steps.length;
+    const z = steps[scan.zi];
+    try{
+      scan.track.applyConstraints({advanced:[{zoom:z}]}).catch(() => {});
+      scan.track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(() => {});
+    }catch(e){}
+    $('zoomRange').value = z;
+  }
+  $('autoZoomBtn').addEventListener('click', () => { scan.auto = !scan.auto; scan.zAt = Date.now(); updateAutoBtn(); });
   $('torchBtn').addEventListener('click', async () => {
     if(!scan.track) return;
     try{
@@ -1401,25 +1890,22 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     }catch(e){ scan.torch = false; toast('Torche non disponible sur cet appareil.'); }
   });
   $('zoomRange').addEventListener('input', async e => {
+    scan.auto = false; updateAutoBtn();
     try{ if(scan.track) await scan.track.applyConstraints({advanced:[{zoom:parseFloat(e.target.value)}]}); }catch(err){}
   });
-  $('viewport').addEventListener('click', async () => {      // toucher l'image = relancer la mise au point
+  $('viewport').addEventListener('click', async () => {              // toucher l'image = relancer la mise au point
     if(!scan.track) return;
     try{
       await scan.track.applyConstraints({advanced:[{focusMode:'single-shot'}]});
-      setTimeout(() => { try{ scan.track && scan.track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(() => {}); }catch(e){} }, 500);
+      setTimeout(() => { try{ scan.track && scan.track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(() => {}); }catch(e){} }, 600);
     }catch(e){}
   });
 
-  async function openScanner(mode){
-    scan.mode = mode; scan.handled = false; scan.last = ''; scan.lastAt = 0;
+  async function startCamera(){
     const token = ++scan.token;
-    $('scanHint').textContent = mode === 'field'
-      ? 'Scannez le code-barres à associer à cette bouteille'
-      : 'Bouteille connue : sa fiche s’ouvre. Nouvelle bouteille : les infos sont recherchées automatiquement.';
+    stopStream();
     setStatus('Ouverture de la caméra…');
-    $('scanner').classList.remove('hidden'); $('scanner').classList.add('flex');
-    scan.open = true; pushLayer('scan');
+    const slow = setTimeout(() => { if(scan.open && token === scan.token && !scan.stream) setStatus('Toujours en attente de la caméra : autorisez l’accès si une demande s’affiche.'); }, 6000);
     try{
       if(!window.isSecureContext) throw new Error('INSECURE');
       if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('NOMEDIA');
@@ -1432,14 +1918,29 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       await startEngine(token);
     }catch(err){
       const m = errText(err);
-      if(m === 'INSECURE') setStatus('La caméra nécessite une page en HTTPS. Utilisez « Saisir le code ».', true);
-      else if(m === 'NOMEDIA') setStatus('Caméra non disponible sur ce navigateur. Utilisez « Saisir le code ».', true);
+      if(m === 'INSECURE') setStatus('La caméra nécessite une page en HTTPS. Utilisez « Saisir le code » ou « Photo HD ».', true);
+      else if(m === 'NOMEDIA') setStatus('Caméra non disponible sur ce navigateur. Utilisez « Saisir le code » ou « Photo HD ».', true);
       else if(/NotAllowed|Permission|denied/i.test(m)) setStatus('Accès à la caméra refusé : autorisez-la dans les réglages du navigateur.', true);
       else if(/NotFound|NoCamera|Requested device/i.test(m)) setStatus('Aucune caméra détectée.', true);
-      else if(m === 'LIB') setStatus('Moteur de scan indisponible (réseau). Utilisez « Saisir le code ».', true);
+      else if(m === 'LIB') setStatus('Moteur de scan indisponible (réseau). Utilisez « Saisir le code » ou « Photo HD ».', true);
       else setStatus('Caméra indisponible : ' + m, true);
+    }finally{
+      clearTimeout(slow);
     }
   }
+  function openScanner(mode){
+    scan.mode = mode; scan.handled = false; scan.last = ''; scan.lastAt = 0; scan.auto = true;
+    $('scanHint').textContent = mode === 'field'
+      ? 'Scannez le code-barres ou le QR code à associer à cette bouteille'
+      : 'Code-barres ou QR du dos de la bouteille : fiche connue → ouverte ; nouvelle → infos recherchées.';
+    $('scanner').classList.remove('hidden'); $('scanner').classList.add('flex');
+    scan.open = true; pushLayer('scan');
+    startCamera();
+  }
+  document.addEventListener('visibilitychange', () => {              // retour d'une autre appli : la caméra a pu être coupée
+    if(document.hidden || !scan.open || scan.handled) return;
+    if(!(scan.track && scan.track.readyState === 'live')) startCamera();
+  });
 
   async function startEngine(token){
     let detector = null;
@@ -1453,82 +1954,143 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     if(token !== scan.token) return;
     if(detector){
       scan.engine = 'native';
-      setStatus('Visez le code-barres (détection native haute précision).');
+      setStatus('Visez le code (détection native haute résolution, zoom automatique).');
       loopNative(detector, token);
     }else{
       setStatus('Chargement du moteur de lecture…');
       await loadAny(ZXING_URLS, () => !!window.ZXing, 5000);
       if(token !== scan.token) return;
       scan.engine = 'zxing';
-      setStatus('Visez le code-barres, bien éclairé (torche et zoom si disponibles).');
+      setStatus('Visez le code, bien éclairé : analyse multi-zones (torche et zoom si disponibles).');
       loopZXing(token);
     }
   }
   function loopNative(detector, token){
     const tick = async () => {
       if(!scan.open || token !== scan.token || scan.handled) return;
+      autoZoom();
       try{
         if(video.readyState >= 2){
           const codes = await detector.detect(video);
-          if(codes && codes.length){ accept(codes[0].rawValue, token); if(scan.handled) return; }
+          if(codes && codes.length){ for(const c of codes){ accept(c.rawValue, token); if(scan.handled) return; } }
         }
       }catch(e){}
       scan.timer = setTimeout(tick, 90);
     };
     tick();
   }
-  function loopZXing(token){
-    const Z = window.ZXing;
-    const hints = new Map();
-    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF, Z.BarcodeFormat.QR_CODE, Z.BarcodeFormat.DATA_MATRIX]);
+  function zxingReader(){
+    const Z = window.ZXing, hints = new Map(), BF = Z.BarcodeFormat;
+    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [BF.EAN_13, BF.EAN_8, BF.UPC_A, BF.UPC_E, BF.CODE_128, BF.CODE_39, BF.ITF, BF.QR_CODE, BF.DATA_MATRIX, BF.PDF_417, BF.AZTEC]);
     hints.set(Z.DecodeHintType.TRY_HARDER, true);
     const reader = new Z.MultiFormatReader(); reader.setHints(hints);
+    return reader;
+  }
+  function zxingDecode(reader, canvas){
+    const Z = window.ZXing;
+    try{ return reader.decodeWithState(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(canvas)))).getText(); }
+    catch(e){ return null; }
+  }
+  /* Zones analysées en alternance : image entière, centre en pleine définition, centre contrasté, petit centre */
+  const ROIS = [{w:1, h:1, f:''}, {w:.6, h:.45, f:''}, {w:.6, h:.45, f:'grayscale(1) contrast(1.8)'}, {w:.35, h:.3, f:'grayscale(1) contrast(1.6)'}];
+  function loopZXing(token){
+    const reader = zxingReader();
     const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d', {willReadFrequently:true});
+    const canFilter = 'filter' in ctx;
     let n = 0;
     const tick = () => {
       if(!scan.open || token !== scan.token || scan.handled) return;
+      autoZoom();
       try{
         const vw = video.videoWidth, vh = video.videoHeight;
         if(vw && vh){
-          // une image sur deux : cadre complet, puis bande centrale agrandie (codes-barres petits)
-          const crop = (n++ % 2 === 1);
-          const sw = crop ? vw * 0.7 : vw, sh = crop ? vh * 0.4 : vh;
-          const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
-          const scale = Math.min(1, 1280 / sw);
-          canvas.width = Math.round(sw * scale); canvas.height = Math.round(sh * scale);
+          const v = ROIS[n++ % ROIS.length];
+          const sw = vw * v.w, sh = vh * v.h, sx = (vw - sw) / 2, sy = (vh - sh) / 2, k = Math.min(1, 1600 / sw);
+          canvas.width = Math.round(sw * k); canvas.height = Math.round(sh * k);
+          if(canFilter) ctx.filter = v.f || 'none';
           ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-          const src = new Z.HTMLCanvasElementLuminanceSource(canvas);
-          const bmp = new Z.BinaryBitmap(new Z.HybridBinarizer(src));
-          try{ const res = reader.decodeWithState(bmp); accept(res.getText(), token); }
-          catch(e){ /* aucun code dans cette image */ }
+          const txt = zxingDecode(reader, canvas);
+          if(txt) accept(txt, token);
         }
       }catch(e){}
-      if(!scan.handled) scan.timer = setTimeout(tick, 110);
+      if(!scan.handled) scan.timer = setTimeout(tick, 90);
     };
     tick();
   }
   function accept(raw, token){
     if(scan.handled || !scan.open || token !== scan.token) return;
-    const code = String(raw || '').replace(/\s+/g,'');
-    if(!code || !validEAN(code)) return;
-    if(scan.engine === 'zxing'){                       // deux lectures identiques = zéro faux positif
+    const r = parseScan(raw); if(!r) return;
+    if(scan.engine === 'zxing'){                                     // deux lectures identiques = aucun faux positif
       const now = Date.now();
-      if(scan.last !== code || now - scan.lastAt > 2000){ scan.last = code; scan.lastAt = now; return; }
+      if(scan.last !== r.code || now - scan.lastAt > 2500){ scan.last = r.code; scan.lastAt = now; return; }
     }
+    finishScan(r.code);
+  }
+  function finishScan(code){
+    if(scan.handled) return;
     scan.handled = true; haptic();
     const mode = scan.mode;
-    closeScanner(true);        // pas de history.back() : une fiche peut s'ouvrir juste après
+    closeScanner(true);                                               // pas de history.back() : une fiche peut s'ouvrir juste après
     handleCode(code, mode);
   }
 
+  /* Photo haute définition : lecture d'une image fixe (petits codes, reflets, caméra instable) */
+  async function decodeImageFile(file){
+    let src = null;
+    try{ src = await createImageBitmap(file); }catch(e){ src = null; }
+    if(!src){
+      src = await new Promise((res, rej) => { const u = URL.createObjectURL(file), im = new Image(); im.onload = () => { URL.revokeObjectURL(u); res(im); }; im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('img')); }; im.src = u; });
+    }
+    const W = src.width || src.naturalWidth, H = src.height || src.naturalHeight;
+    if('BarcodeDetector' in window){
+      try{
+        const sup = await BarcodeDetector.getSupportedFormats();
+        const det = new BarcodeDetector({formats:FORMATS_NATIVE.filter(f => sup.indexOf(f) !== -1)});
+        const res = await det.detect(src);
+        for(const c of (res || [])){ const r = parseScan(c.rawValue); if(r) return r; }
+      }catch(e){}
+    }
+    await loadAny(ZXING_URLS, () => !!window.ZXing, 5000);
+    const reader = zxingReader(), canvas = document.createElement('canvas'), ctx = canvas.getContext('2d', {willReadFrequently:true});
+    const canFilter = 'filter' in ctx, t0 = Date.now();
+    for(const maxW of [2400, 1600, 1000]){
+      for(const v of ROIS.concat([{w:.8, h:.6, f:''}])){
+        if(Date.now() - t0 > 6500) return null;
+        const sw = W * v.w, sh = H * v.h, sx = (W - sw) / 2, sy = (H - sh) / 2, k = Math.min(1, maxW / sw);
+        canvas.width = Math.max(1, Math.round(sw * k)); canvas.height = Math.max(1, Math.round(sh * k));
+        if(canFilter) ctx.filter = v.f || 'none';
+        ctx.drawImage(src, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        const txt = zxingDecode(reader, canvas), r = txt ? parseScan(txt) : null;
+        if(r) return r;
+        await new Promise(r2 => setTimeout(r2, 0));                   // laisse respirer l'interface
+      }
+    }
+    return null;
+  }
+  $('scanPhoto').addEventListener('click', () => $('hdInput').click());
+  $('hdInput').addEventListener('change', async () => {
+    const f = $('hdInput').files && $('hdInput').files[0]; $('hdInput').value = '';
+    if(!f || !scan.open) return;
+    setStatus('Analyse de la photo haute définition…'); $('scanPhoto').disabled = true;
+    let r = null;
+    try{ r = await withTimeout(decodeImageFile(f), TIMEOUT_MS + 4000); }
+    catch(e){ r = null; }
+    finally{ $('scanPhoto').disabled = false; }
+    if(!scan.open) return;
+    if(r){ finishScan(r.code); return; }
+    setStatus('Aucun code lisible sur cette photo : rapprochez-vous, évitez les reflets, utilisez la torche.', true);
+    if(!(scan.track && scan.track.readyState === 'live')) startCamera();
+  });
+
   function handleCode(code, mode){
     if(!code) return;
+    const numeric = /^\d{6,14}$/.test(code);
     if(mode === 'field'){
       fCode.value = code;
       const dup = findByCode(code, editingId);
       if(dup){ errEl.textContent = 'Ce code-barres est déjà associé à « ' + dup.name + ' ».'; return; }
       errEl.textContent = '';
-      runLookup(code, !editingId);
+      if(numeric) runLookup(code, !editingId); else toast('Code QR enregistré tel quel (hors norme GS1).');
       return;
     }
     const found = findByCode(code, null);
@@ -1536,10 +2098,10 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       openSheet(found);
       errEl.textContent = '';
       toast('Bouteille déjà dans votre cave : ajustez la quantité avec − / +.');
-      runLookup(code, false);
+      if(numeric) runLookup(code, false);
     }else{
       openSheet(null, {code:code});
-      runLookup(code, true);
+      if(numeric) runLookup(code, true); else toast('Nouveau code QR (hors norme GS1) : complétez la fiche.');
     }
   }
   $('scanBtn').addEventListener('click', () => openScanner('stock'));
@@ -1549,7 +2111,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     const mode = scan.mode;
     const v = prompt('Saisissez le code-barres (EAN) :');
     if(v === null) return;
-    const code = v.replace(/\s+/g,'');
+    const code = v.replace(/\s+/g, '');
     if(!code) return;
     closeScanner(true); handleCode(code, mode);
   });
@@ -1581,6 +2143,14 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       if(/^https?:/.test(base)) $('manifest').href = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(m));
     }catch(e){}
   }
+
+  /* Filet de sécurité global : aucun spinner ne reste bloqué */
+  function killSpinners(){
+    document.querySelectorAll('.spin, .spinner, [data-spinner]').forEach(el => { if(el.closest('#vLoading')) return; el.remove(); });
+    if(view === 'loading') showProblem('Une erreur inattendue est survenue. Vérifiez votre connexion puis réessayez.');
+  }
+  window.addEventListener('error', killSpinners);
+  window.addEventListener('unhandledrejection', e => { try{ e.preventDefault(); }catch(_){} killSpinners(); });
 
   /* ------------------------------------------------------------------ */
   /* Démarrage anti-blocage                                               */
@@ -1627,7 +2197,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     finally{ clearSbTokens(); if(user) leaveApp(); showAuth('login'); }
   });
 
-  loadSort();
+  loadSort(); loadSettings();
   setupIconsAndManifest();
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
