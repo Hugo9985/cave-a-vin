@@ -235,7 +235,7 @@
   <div class="sheet pb-safe sheet-anim">
     <h2 class="text-[22px] font-bold" id="infoTitle">Infos produit</h2>
     <div class="mt-3" id="infoBody"></div>
-    <button type="button" class="btn btn-wine w-full mt-4" id="aiBtn">✨ Demander à l’IA</button>
+    <button type="button" class="btn btn-wine w-full mt-4" id="aiBtn">✨ Analyse & Estimation IA</button>
     <div class="mt-3" id="aiBox"></div>
     <div class="grid grid-cols-2 gap-3 mt-5">
       <button type="button" class="btn btn-dark" id="infoRefresh">🔄 Actualiser</button>
@@ -1039,7 +1039,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
   }
   function setMeta(id, info){
     if(!id || !info) return;
-    meta[id] = {info:slimInfo(info), at:Date.now()}; PCACHE.clear();
+    meta[id] = {info:slimInfo(info), groq:(meta[id] || {}).groq, at:Date.now()}; PCACHE.clear();
     if(user && !lsSet(metaKey(), JSON.stringify(meta))){ /* quota : on garde en mémoire seulement */ }
   }
   function dropMeta(id){ if(meta[id]){ delete meta[id]; PCACHE.clear(); if(user) lsSet(metaKey(), JSON.stringify(meta)); } }
@@ -1063,6 +1063,9 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       if(g){ from = g[2].from; peak = g[2].peak; to = g[2].to; t = g[2].t.slice(); basis = 'cépage'; }
     }
     if(type === 'E' && b.vintage && /champagne/.test(txt)){ from = 5; peak = 15; to = 25; t = [8,10]; basis = 'champagne millésimé'; }
+    const gq = !infoOv && mt.groq;
+    if(gq && gq.to != null){ from = gq.from != null ? gq.from : from; peak = gq.peak != null ? gq.peak : Math.min(peak, gq.to); to = gq.to; basis = 'IA Groq'; }
+    if(gq && gq.tmin != null){ t = [gq.tmin, gq.tmax != null ? gq.tmax : gq.tmin]; }
     const p = {
       type:type, typeLabel:td.label, from:from, peak:peak, to:to, tmin:t[0], tmax:t[1], basis:basis, guessType:guessType,
       appel: loc ? loc.name : '', region: loc ? loc.region : '', country: loc ? loc.country : '',
@@ -1255,33 +1258,115 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
       (loading ? spinnerHTML('Recherche dans les bases publiques…') : '') +
       '<p class="text-[11px] text-zinc-500 mt-2">Analyse automatique par règles œnologiques et recherche dans les bases ouvertes' + (r.net ? ' (bases consultées)' : '') + '. Estimation indicative, ce n’est pas une cote de marché officielle.</p></div>';
   }
-  let aiTok = 0;
-  function aiLocal(){
-    const b = infoBottle; if(!b) return;
-    const box = $('aiBox'); if(!box) return;
-    let r; try{ r = aiAnalyze(b, metaOf(b.id).info || null); }catch(e){ r = null; }
-    box.innerHTML = r ? aiHTML(b, r, false) : '';
+  /* ---- IA Groq (compatible OpenAI) ---- */
+  const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+  const GROQ_KEY = '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';
+  const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+  async function groqCall(model, messages){
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+    try{
+      const r = await fetch(GROQ_URL, {method:'POST', signal:ctl.signal,
+        headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + GROQ_KEY},
+        body:JSON.stringify({model:model, messages:messages, temperature:0.3, max_tokens:800, response_format:{type:'json_object'}})});
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      return String(j.choices[0].message.content || '');
+    } finally { clearTimeout(t); }
   }
+  function gNum(x, lo, hi){ const n = parseFloat(String(x).replace(',', '.')); return isFinite(n) && n >= lo && n <= hi ? n : null; }
+  function gStr(x, n){ return typeof x === 'string' && x.trim() && !/^(null|inconnu|n\/a)$/i.test(x.trim()) ? x.trim().slice(0, n) : ''; }
+  function groqClean(o, model){
+    let from = gNum(o.aging_from_years, 0, 60), peak = gNum(o.aging_peak_years, 0, 80), to = gNum(o.aging_until_years, 0, 100);
+    if(from != null && peak != null && peak < from) peak = from;
+    if(peak != null && to != null && to < peak) to = peak;
+    let tmin = gNum(o.serving_temp_min, 3, 22), tmax = gNum(o.serving_temp_max, 3, 22);
+    if(tmin != null && tmax != null && tmax < tmin){ const x = tmin; tmin = tmax; tmax = x; }
+    let price = gNum(o.estimated_price_eur, 0.5, 1e6), low = gNum(o.price_low_eur, 0.5, 1e6), high = gNum(o.price_high_eur, 0.5, 1e6);
+    if(price != null){ if(low == null || low > price) low = price * 0.85; if(high == null || high < price) high = price * 1.15; }
+    return {model:model, at:Date.now(), price:price, low:low, high:high,
+      appellation:gStr(o.appellation, 80), region:gStr(o.region, 80), country:gStr(o.country, 60), domain:gStr(o.domain, 100),
+      grapes:Array.isArray(o.grapes) ? o.grapes.map(x => gStr(x, 40)).filter(Boolean).slice(0, 6) : [],
+      notes:gStr(o.tasting_notes, 600), pairing:gStr(o.food_pairing, 200), rarity:gStr(o.rarity, 60), comment:gStr(o.price_comment, 300),
+      conf:gStr(o.confidence, 12).toLowerCase(), from:from, peak:peak, to:to, tmin:tmin, tmax:tmax};
+  }
+  async function groqAnalyze(b, info){
+    const known = info ? [info.name, info.domain, info.appellation, info.region, info.country, (info.grapes || []).join(', ')].filter(Boolean).join(' | ') : '';
+    const msgs = [
+      {role:'system', content:'Tu es un sommelier expert et un courtier en vins. Réponds uniquement par un objet JSON valide en français. N\'invente rien : si tu ne connais pas la bouteille, mets null ou "" et confidence "faible". Les prix sont en euros TTC par bouteille de 75 cl, estimés sur le marché secondaire européen.'},
+      {role:'user', content:'Année actuelle : ' + YEAR + '.\nBouteille : ' + b.name + '\nMillésime : ' + (b.vintage || 'inconnu') + '\nPrix payé/saisi : ' + (b.price > 0 ? b.price + ' €' : 'inconnu') +
+        (b.barcode ? '\nCode-barres : ' + b.barcode : '') + (known ? '\nInfos trouvées dans les bases ouvertes : ' + known : '') +
+        '\n\nRenvoie exactement ces clés : {"estimated_price_eur": nombre, "price_low_eur": nombre, "price_high_eur": nombre, "price_comment": "raisons de l\'estimation (millésime, âge, rareté)", "rarity": "courant|recherché|rare|très rare", "domain": "", "appellation": "", "region": "", "country": "", "grapes": [], "tasting_notes": "2-3 phrases", "food_pairing": "", "serving_temp_min": nombre, "serving_temp_max": nombre, "aging_from_years": nombre d\'années après le millésime où il devient prêt, "aging_peak_years": nombre d\'années de l\'apogée, "aging_until_years": nombre d\'années de la limite de garde, "confidence": "haute|moyenne|faible"}'}
+    ];
+    let lastErr = null;
+    for(const m of GROQ_MODELS){
+      try{
+        const txt = await groqCall(m, msgs);
+        const a = txt.indexOf('{'), z = txt.lastIndexOf('}');
+        const o = JSON.parse(txt.slice(a, z + 1));
+        const g = groqClean(o, m);
+        if(g.price == null && !g.notes && g.tmin == null) throw new Error('réponse vide');
+        return g;
+      }catch(e){ lastErr = e; }
+    }
+    throw lastErr || new Error('Groq indisponible');
+  }
+  function setGroq(id, g){
+    if(!id || !g) return;
+    meta[id] = Object.assign({}, meta[id] || {}, {groq:g, at:Date.now()}); PCACHE.clear();
+    if(user) lsSet(metaKey(), JSON.stringify(meta));
+  }
+  function groqHTML(b, g){
+    const li = (k, v) => v ? '<div class="mt-2 text-sm leading-snug"><b>' + k + '</b><br>' + esc(v) + '</div>' : '';
+    const price = g.price != null
+      ? '<div class="mt-2 text-sm">Valeur estimée <b class="text-white text-lg">' + eur.format(g.price) + '</b>' +
+        (b.price > 0 ? ' <span class="font-bold ' + (g.price >= b.price ? 'text-emerald-400' : 'text-red-400') + '">' + (g.price >= b.price ? '▲ ' : '▼ ') + fmtPct((g.price / b.price - 1) * 100) + '</span>' : '') +
+        '<div class="text-xs text-zinc-400">Fourchette ' + eur.format(g.low) + ' – ' + eur.format(g.high) + ' par bouteille' + (g.rarity ? ' · rareté : ' + esc(g.rarity) : '') + '</div></div>'
+      : '<p class="text-sm text-zinc-400 mt-2">Prix non estimable pour cette bouteille.</p>';
+    const garde = g.to != null && b.vintage ? 'Prêt dès ' + (b.vintage + (g.from || 0)) + ' · apogée jusqu’en ' + (b.vintage + (g.peak != null ? g.peak : g.to)) + ' · limite vers ' + (b.vintage + g.to)
+      : (g.to != null ? 'Limite de garde : ' + g.to + ' ans' : '');
+    return '<div class="rounded-2xl border border-wine/50 bg-wine/10 p-3.5">' +
+      '<div class="font-bold text-[15px]">✨ Analyse & Estimation IA</div>' + price +
+      li('Notes de dégustation', g.notes) + li('Température de service', g.tmin != null ? g.tmin + ' – ' + (g.tmax != null ? g.tmax : g.tmin) + ' °C' : '') +
+      li('Potentiel de vieillissement', garde) + li('Accords', g.pairing) + li('Pourquoi cette estimation', g.comment) +
+      '<p class="text-[11px] text-zinc-500 mt-2">Généré par Groq (' + esc(g.model) + ')' + (g.conf ? ' · fiabilité ' + esc(g.conf) : '') + '. Estimation indicative qui peut comporter des erreurs, ce n’est pas une cote officielle.</p></div>';
+  }
+  function shownAI(b){
+    const g = metaOf(b.id).groq;
+    if(g) return groqHTML(b, g);
+    let r; try{ r = aiAnalyze(b, metaOf(b.id).info || null); }catch(e){ r = null; }
+    return r ? aiHTML(b, r, false) : '';
+  }
+  let aiTok = 0;
+  function aiLocal(){ const b = infoBottle; if(b && $('aiBox')) $('aiBox').innerHTML = shownAI(b); }
   async function askAI(){
     const b = infoBottle; if(!b) return;
     const tok = ++aiTok, box = $('aiBox'), btn = $('aiBtn');
     btn.disabled = true;
-    let info = metaOf(b.id).info || null, r = null;
-    try{ r = aiAnalyze(b, info); box.innerHTML = aiHTML(b, r, true); }catch(e){}
-    const guard = setTimeout(() => { if(tok === aiTok){ btn.disabled = false; const s = box.querySelector('.spinner'); if(s) s.parentNode.remove(); } }, TIMEOUT_MS + 3500);
+    box.innerHTML = spinnerHTML('Analyse par l’IA Groq et recherche dans les bases publiques…');
+    const guard = setTimeout(() => { if(tok === aiTok){ btn.disabled = false; if(box.querySelector('.spinner')) box.innerHTML = shownAI(b); } }, TIMEOUT_MS * 2 + 3000);
+    let info = metaOf(b.id).info || null, g = null, gErr = '';
     try{
-      const got = await lookupSafe(b.barcode, b.name);
-      if(got){ info = got; setMeta(b.id, got); render(); }
-      r = aiAnalyze(b, info);
-      saveAI(b.id, {score:r.score, rarity:r.rarity, unit:r.unit, at:r.at});
+      const got = await lookupSafe(b.barcode, b.name).catch(() => null);
+      if(got) info = got;
+      try{ g = await groqAnalyze(b, info); }catch(e){ gErr = errText(e); }
+      if(g){
+        const m = Object.assign({name:b.name}, info || {});
+        if(!m.domain) m.domain = g.domain; if(!m.appellation) m.appellation = g.appellation;
+        if(!m.region) m.region = g.region; if(!m.country) m.country = g.country;
+        if(!(m.grapes && m.grapes.length)) m.grapes = g.grapes;
+        if(!m.description) m.description = g.notes;
+        setMeta(b.id, m); setGroq(b.id, g);
+      } else if(got) setMeta(b.id, got);
+      render();
       if(tok === aiTok && $('infoOverlay').classList.contains('open')){
-        $('infoBody').innerHTML = infoHTML(info, b);
-        box.innerHTML = aiHTML(b, r, false) + (got ? '' : '<p class="text-xs text-amber-400 mt-2">Aucune base n’a répondu : analyse faite d’après le nom et le millésime.</p>');
+        $('infoBody').innerHTML = infoHTML(metaOf(b.id).info || null, b);
+        box.innerHTML = shownAI(b) + (g ? '' : '<p class="text-xs text-amber-400 mt-2">L’IA Groq n’a pas répondu' + (gErr ? ' (' + esc(gErr) + ')' : '') + ' : estimation locale affichée.</p>');
       }
     }catch(e){
-      if(tok === aiTok && r) box.innerHTML = aiHTML(b, r, false);
+      if(tok === aiTok) box.innerHTML = shownAI(b);
     }finally{
-      clearTimeout(guard); if(tok === aiTok){ btn.disabled = false; const s = box.querySelector('.spinner'); if(s) s.parentNode.remove(); }
+      clearTimeout(guard);
+      if(tok === aiTok){ btn.disabled = false; if(box.querySelector('.spinner')) box.innerHTML = shownAI(b); }
     }
   }
 
@@ -1330,9 +1415,11 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     const vint = b.vintage ? b.vintage : 'Sans millésime';
     const photo = b.photo ? '<img src="' + esc(b.photo) + '" alt="" loading="lazy" class="w-full h-full object-cover block">' : '🍷';
     const st = drinkStatus(b), S = STATUS[st.key], v = valuation(b);
-    const est = v.na ? '' : '<div class="flex items-center gap-2 mt-1.5">' + chartSVG(b, false) +
-      '<div class="text-[13px] leading-tight"><span class="text-zinc-400">Estimée</span> <b class="text-white">' + eur.format(v.unit) + '</b> ' +
-      '<span class="font-bold whitespace-nowrap ' + (v.pct >= 0 ? 'text-emerald-400' : 'text-red-400') + '">' + (v.pct >= 0 ? '▲ ' : '▼ ') + fmtPct(v.pct) + '</span></div></div>';
+    const gq = metaOf(b.id).groq, gp = gq && gq.price != null && b.price > 0 ? gq.price : null;
+    const eu = gp != null ? gp : v.unit, ep = gp != null ? (gp / b.price - 1) * 100 : v.pct;
+    const est = v.na && gp == null ? '' : '<div class="flex items-center gap-2 mt-1.5">' + (v.na ? '' : chartSVG(b, false)) +
+      '<div class="text-[13px] leading-tight"><span class="text-zinc-400">' + (gp != null ? 'Estimée IA' : 'Estimée') + '</span> <b class="text-white">' + eur.format(eu) + '</b> ' +
+      '<span class="font-bold whitespace-nowrap ' + (ep >= 0 ? 'text-emerald-400' : 'text-red-400') + '">' + (ep >= 0 ? '▲ ' : '▼ ') + fmtPct(ep) + '</span></div></div>';
     return '<article class="flex gap-3.5 p-3.5 bg-surface border border-line rounded-[22px]" data-id="' + esc(b.id) + '">' +
       '<div class="w-[84px] h-[112px] shrink-0 rounded-2xl overflow-hidden bg-surface2 border border-line grid place-items-center text-3xl">' + photo + '</div>' +
       '<div class="flex-1 min-w-0 flex flex-col">' +
@@ -1343,7 +1430,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
         (b.barcode ? '<div class="text-xs text-zinc-500 mt-0.5 tracking-wide tabular-nums break-all">▮▯▮ ' + esc(b.barcode) + '</div>' : '') +
         '<div class="flex flex-wrap items-center gap-1.5 mt-2">' +
           '<span class="px-2.5 py-1 rounded-full bg-surface2 border border-line text-xs font-bold mr-1">Étage <span class="text-wine">' + b.floor + '</span></span>' +
-          '<button class="ibtn text-wine" data-act="ai" aria-label="Demander à l’IA"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg></button>' +
+          '<button class="ibtn text-wine" data-act="ai" aria-label="Analyse &amp; Estimation IA"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg></button>' +
           '<button class="ibtn" data-act="info" aria-label="Infos produit"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg></button>' +
           '<button class="ibtn" data-act="edit" aria-label="Modifier"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>' +
           '<button class="ibtn text-red-400" data-act="del" aria-label="Supprimer"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg></button>' +
@@ -1646,7 +1733,7 @@ const SUPABASE_KEY = "sb_publishable_vfkzJLbmzR8ix8bq_oCeXA__qV5Cxsx";
     return v ? '<div class="flex gap-3 py-1.5 border-b border-line/60 last:border-0"><div class="w-24 shrink-0 text-xs uppercase tracking-wide text-zinc-400 pt-0.5">' + l +
       '</div><div class="flex-1 text-[15px] break-words">' + esc(v) + '</div></div>' : '';
   }
-  const BASIS = {'appellation':'l’appellation', 'cépage':'le cépage', 'type':'le type de vin (peu précis)', 'champagne millésimé':'le champagne millésimé'};
+  const BASIS = {'IA Groq':'l’analyse IA Groq', 'appellation':'l’appellation', 'cépage':'le cépage', 'type':'le type de vin (peu précis)', 'champagne millésimé':'le champagne millésimé'};
   function infoHTML(info, b){
     const bb = b || {id:'_', name:(info && info.name) || '', vintage:null, price:0, qty:0};
     const p = wineProfile(bb, info);
